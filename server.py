@@ -4,6 +4,9 @@ Tashqi framework yo'q, faqat Python stdlib (http.server).
 """
 import json
 import re
+import os
+import urllib.request
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from model import MyAI
@@ -15,6 +18,70 @@ MODEL_PATH = ROOT / "model.pkl"
 print("Model yuklanmoqda...")
 AI = MyAI.load(MODEL_PATH)
 print(f"Model tayyor (vocab={AI.vocab_size})")
+
+
+def load_env():
+    """.env fayldan kalitlarni o'qiydi."""
+    env = {}
+    ef = ROOT / ".env"
+    if ef.exists():
+        for line in ef.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+ENV = load_env()
+SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
+if SERPAPI_KEY:
+    print("Web qidiruv yoqilgan (SerpApi)")
+
+
+def web_search(query):
+    """SerpApi orqali Google'da qidiradi va eng yaxshi javobni qaytaradi."""
+    if not SERPAPI_KEY:
+        return {"answer": "Web qidiruv sozlanmagan (.env da SERPAPI_KEY yo'q).", "source": "", "link": ""}
+    params = urllib.parse.urlencode({
+        "engine": "google", "q": query, "hl": "uz", "gl": "uz",
+        "num": "5", "api_key": SERPAPI_KEY,
+    })
+    url = f"https://serpapi.com/search?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            d = json.loads(r.read())
+    except Exception as e:
+        return {"answer": f"Qidiruvda xato: {e}", "source": "", "link": ""}
+
+    # Ustuvorlik: answer_box > knowledge_graph > ai_overview > organic
+    ab = d.get("answer_box") or {}
+    if ab:
+        ans = ab.get("answer") or ab.get("snippet") or ab.get("result") or ""
+        if ans:
+            return {"answer": ans, "source": ab.get("title", "Google"),
+                    "link": ab.get("link", "")}
+    kg = d.get("knowledge_graph") or {}
+    if kg.get("description"):
+        return {"answer": kg["description"], "source": kg.get("title", "Google"),
+                "link": kg.get("source", {}).get("link", "") if isinstance(kg.get("source"), dict) else ""}
+    ai = d.get("ai_overview") or {}
+    blocks = ai.get("text_blocks") or []
+    if blocks:
+        texts = []
+        for b in blocks:
+            if b.get("snippet"):
+                texts.append(b["snippet"])
+            for it in (b.get("list") or []):
+                if it.get("snippet"):
+                    texts.append("• " + it["snippet"])
+        if texts:
+            return {"answer": " ".join(texts)[:800], "source": "Google AI Overview", "link": ""}
+    org = d.get("organic_results") or []
+    if org:
+        top = org[0]
+        return {"answer": top.get("snippet") or top.get("title", ""),
+                "source": top.get("title", "Google"), "link": top.get("link", "")}
+    return {"answer": "Hech narsa topilmadi.", "source": "", "link": ""}
 
 
 def clean_reply(text, prompt):
@@ -78,6 +145,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"response": reply}, ensure_ascii=False))
         elif self.path == "/api/stream":
             self.stream_reply()
+        elif self.path == "/api/search":
+            data = self._read_body()
+            query = (data.get("query") or data.get("prompt") or "").strip()
+            if not query:
+                self._send(400, json.dumps({"error": "query bo'sh"}))
+                return
+            result = web_search(query)
+            self._send(200, json.dumps(result, ensure_ascii=False))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
