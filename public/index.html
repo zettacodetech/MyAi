@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyAI — Shaxsiy sun'iy intellekt</title>
+<style>
+  :root{
+    --bg:#f0eee6; --panel:#faf9f5; --ink:#1f1e1c; --muted:#73726c;
+    --accent:#cc785c; --accent-2:#d97757; --line:#e3e1d8; --user:#eae7dc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+    height:100vh; display:flex; flex-direction:column;
+  }
+  header{
+    padding:16px 24px; display:flex; align-items:center; gap:12px;
+    border-bottom:1px solid var(--line);
+  }
+  .logo{
+    width:30px;height:30px;border-radius:7px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:700;font-size:16px;
+  }
+  header h1{font-size:17px;font-weight:600;letter-spacing:-.2px}
+  header .tag{font-size:12px;color:var(--muted);margin-left:auto}
+
+  main{flex:1; overflow-y:auto; display:flex; flex-direction:column}
+  .wrap{width:100%;max-width:720px;margin:0 auto;padding:24px 20px;flex:1;width:100%}
+
+  .welcome{
+    text-align:center; margin:auto 0; padding:40px 0;
+  }
+  .welcome .big{
+    width:56px;height:56px;border-radius:14px;margin:0 auto 20px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:700;
+  }
+  .welcome h2{
+    font-size:30px;font-weight:500;letter-spacing:-.5px;margin-bottom:10px;
+    font-family:Georgia,"Times New Roman",serif;
+  }
+  .welcome p{color:var(--muted);font-size:15px;max-width:440px;margin:0 auto}
+
+  .msg{display:flex;gap:12px;margin-bottom:22px;line-height:1.6}
+  .msg .av{
+    width:28px;height:28px;border-radius:7px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;
+  }
+  .msg.user .av{background:#6b6a63}
+  .msg.ai .av{background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  .msg .body{padding-top:3px;font-size:15.5px;white-space:pre-wrap}
+  .msg.ai .body{color:var(--ink)}
+  .msg .who{font-size:12px;color:var(--muted);margin-bottom:2px;font-weight:600}
+  .typing{color:var(--muted);font-style:italic}
+
+  footer{border-top:1px solid var(--line);background:var(--bg);padding:14px 20px}
+  .composer{
+    max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .composer textarea{
+    flex:1;border:none;outline:none;resize:none;background:transparent;
+    font-family:inherit;font-size:15px;color:var(--ink);max-height:140px;line-height:1.5;
+  }
+  .send{
+    width:34px;height:34px;border:none;border-radius:9px;cursor:pointer;flex-shrink:0;
+    background:var(--accent);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;
+    transition:background .15s;
+  }
+  .send:hover{background:var(--accent-2)}
+  .send:disabled{background:#c9c7bd;cursor:default}
+  .hint{max-width:720px;margin:8px auto 0;text-align:center;font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">M</div>
+    <h1>MyAI</h1>
+    <span class="tag">0 dan qurilgan neyron tarmoq</span>
+  </header>
+
+  <main id="main">
+    <div class="wrap" id="chat">
+      <div class="welcome" id="welcome">
+        <div class="big">M</div>
+        <h2>Salom! Men MyAI</h2>
+        <p>Men 0 dan yozilgan, o'zbek tilida o'qitilgan neyron tarmoqman. Menga biror narsa yozing — men davom ettirib matn yarataman.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="Xabar yozing... (masalan: salom)"></textarea>
+      <button class="send" id="send">↑</button>
+    </div>
+    <div class="hint">MyAI kichik model — javoblari sodda bo'lishi mumkin. Bu o'zimiz qurgan AI 🌱</div>
+  </footer>
+
+<script>
+const chat = document.getElementById('chat');
+const welcome = document.getElementById('welcome');
+const input = document.getElementById('input');
+const send = document.getElementById('send');
+const main = document.getElementById('main');
+
+function addMsg(who, text, cls){
+  const m = document.createElement('div');
+  m.className = 'msg ' + cls;
+  m.innerHTML = `<div class="av">${cls==='user'?'S':'M'}</div>
+    <div><div class="who">${who}</div><div class="body"></div></div>`;
+  m.querySelector('.body').textContent = text;
+  chat.appendChild(m);
+  main.scrollTop = main.scrollHeight;
+  return m.querySelector('.body');
+}
+
+async function ask(){
+  const text = input.value.trim();
+  if(!text) return;
+  if(welcome) welcome.remove();
+  input.value=''; input.style.height='auto';
+  addMsg('Siz', text, 'user');
+  const body = addMsg('MyAI', '', 'ai');
+  body.innerHTML = '<span class="typing">yozyapti...</span>';
+  send.disabled = true;
+  try{
+    const r = await fetch('/api/generate',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt:text, temperature:0.7})
+    });
+    const d = await r.json();
+    body.textContent = d.response || '...';
+  }catch(e){
+    body.textContent = '[server bilan aloqa yo\'q]';
+  }
+  send.disabled = false;
+  main.scrollTop = main.scrollHeight;
+  input.focus();
+}
+
+send.onclick = ask;
+input.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); ask(); }
+});
+input.addEventListener('input', ()=>{
+  input.style.height='auto';
+  input.style.height = Math.min(input.scrollHeight,140)+'px';
+});
+</script>
+</body>
+</html>
