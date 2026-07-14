@@ -8,7 +8,7 @@ STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
 text = open(CORPUS, encoding="utf-8").read()
 print(f"Korpus: {len(text)} belgi")
 
-ai = MyAI(block_size=8, n_embd=24, n_hidden=128)
+ai = MyAI(block_size=10, n_embd=32, n_hidden=192)
 ai.build_vocab(text)
 print(f"Vocab: {ai.vocab_size} belgi -> {''.join(ai.itos[i] for i in range(ai.vocab_size))!r}")
 print(f"O'qitish boshlandi ({STEPS} qadam)...")

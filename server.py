@@ -60,21 +60,58 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, "Topilmadi", "text/plain")
 
-    def do_POST(self):
-        if self.path != "/api/generate":
-            self._send(404, json.dumps({"error": "not found"}))
-            return
+    def _read_body(self):
         length = int(self.headers.get("Content-Length", 0))
         try:
-            data = json.loads(self.rfile.read(length) or "{}")
+            return json.loads(self.rfile.read(length) or "{}")
         except Exception:
-            data = {}
+            return {}
+
+    def do_POST(self):
+        if self.path == "/api/generate":
+            data = self._read_body()
+            prompt = (data.get("prompt") or "").strip().lower()
+            temp = float(data.get("temperature", 0.7))
+            seed_text = prompt if prompt else "salom"
+            raw = AI.generate(seed_text, n=160, temperature=temp)
+            reply = clean_reply(raw, seed_text)
+            self._send(200, json.dumps({"response": reply}, ensure_ascii=False))
+        elif self.path == "/api/stream":
+            self.stream_reply()
+        else:
+            self._send(404, json.dumps({"error": "not found"}))
+
+    def stream_reply(self):
+        """Javobni harf-harf (SSE) yuboradi - jonli chat effekti."""
+        data = self._read_body()
         prompt = (data.get("prompt") or "").strip().lower()
         temp = float(data.get("temperature", 0.7))
         seed_text = prompt if prompt else "salom"
-        raw = AI.generate(seed_text, n=160, temperature=temp)
-        reply = clean_reply(raw, seed_text)
-        self._send(200, json.dumps({"response": reply}, ensure_ascii=False))
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        started = False
+        buf = ""
+        try:
+            for ch in AI.generate_stream(seed_text, n=220, temperature=temp):
+                if not started:
+                    if ch in " .?!,\n":
+                        continue
+                    started = True
+                buf += ch
+                payload = json.dumps({"c": ch}, ensure_ascii=False)
+                self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                if ch in ".?!" and len(buf.strip()) >= 12:
+                    break
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 
 def main(port=3070):

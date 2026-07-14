@@ -157,6 +157,23 @@ class MyAI:
             ctx = ctx[1:] + [idx]
         return self.decode(out)
 
+    def generate_stream(self, prompt="", n=200, temperature=1.0, seed=None):
+        """generate() ning oqim (stream) versiyasi - har bir belgini birma-bir qaytaradi."""
+        rng = np.random.RandomState(seed) if seed is not None else self._rng
+        ctx = [0] * self.block_size
+        for ch in prompt:
+            if ch in self.stoi:
+                ctx = ctx[1:] + [self.stoi[ch]]
+        for _ in range(n):
+            X = np.array([ctx])
+            logits, _ = self._forward(X)
+            logits = logits[0] / max(temperature, 1e-3)
+            logits -= logits.max()
+            p = np.exp(logits); p /= p.sum()
+            idx = int(rng.choice(self.vocab_size, p=p))
+            ctx = ctx[1:] + [idx]
+            yield self.itos[idx]
+
     # ------------------------------------------------------------------ #
     #  Saqlash / yuklash
     # ------------------------------------------------------------------ #
