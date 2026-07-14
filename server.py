@@ -48,7 +48,7 @@ def web_search(query):
     })
     url = f"https://serpapi.com/search?{params}"
     try:
-        with urllib.request.urlopen(url, timeout=30) as r:
+        with urllib.request.urlopen(url, timeout=45) as r:
             d = json.loads(r.read())
     except Exception as e:
         return {"answer": f"Qidiruvda xato: {e}", "source": "", "link": ""}
@@ -82,6 +82,29 @@ def web_search(query):
         return {"answer": top.get("snippet") or top.get("title", ""),
                 "source": top.get("title", "Google"), "link": top.get("link", "")}
     return {"answer": "Hech narsa topilmadi.", "source": "", "link": ""}
+
+
+FACT_WORDS = ("qancha", "necha", "nechta", "qachon", "qayer", "qaysi",
+              "poytaxti", "aholisi", "narxi", "ob-havo", "obhavo", "nechanchi",
+              "qanaqa", "nima uchun", "kim ", "qanday qilib", "eng katta",
+              "eng baland", "eng uzun", "necha yil")
+CHITCHAT = ("salom", "assalom", "qalaysiz", "qandaysiz", "rahmat", "xayr",
+            "ismingiz", "isming", "kimsan", "kim san", "yaxshimisiz",
+            "tanishaylik", "qalay", "nima gap")
+
+
+def is_factual(q):
+    """Savol faktik (internetdan qidirish kerak)mi yoki oddiy suhbatmi?"""
+    ql = q.lower()
+    if any(w in ql for w in CHITCHAT):
+        return False
+    if "?" in q:
+        return True
+    if any(w in ql for w in FACT_WORDS):
+        return True
+    if any(ch.isdigit() for ch in q):
+        return True
+    return False
 
 
 def clean_reply(text, prompt):
@@ -153,6 +176,22 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = web_search(query)
             self._send(200, json.dumps(result, ensure_ascii=False))
+        elif self.path == "/api/chat":
+            # AQLLI rejim: o'zi qaror qiladi - qidirish yoki neyron tarmoq
+            data = self._read_body()
+            q = (data.get("prompt") or "").strip()
+            if not q:
+                self._send(400, json.dumps({"error": "bo'sh"}))
+                return
+            if SERPAPI_KEY and is_factual(q):
+                res = web_search(q)
+                res["mode"] = "web"
+                self._send(200, json.dumps(res, ensure_ascii=False))
+            else:
+                seed = q.lower()
+                raw = AI.generate(seed, n=160, temperature=0.7)
+                reply = clean_reply(raw, seed)
+                self._send(200, json.dumps({"answer": reply, "mode": "ai"}, ensure_ascii=False))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
