@@ -84,6 +84,54 @@ def web_search(query):
     return {"answer": "Hech narsa topilmadi.", "source": "", "link": ""}
 
 
+def _serp(params):
+    params = dict(params); params["api_key"] = SERPAPI_KEY
+    url = "https://serpapi.com/search?" + urllib.parse.urlencode(params)
+    with urllib.request.urlopen(url, timeout=45) as r:
+        return json.loads(r.read())
+
+
+def news_search(query):
+    """Google yangiliklaridan qidiradi."""
+    if not SERPAPI_KEY:
+        return {"type": "news", "items": []}
+    try:
+        d = _serp({"engine": "google_news", "q": query, "hl": "uz", "gl": "uz"})
+    except Exception as e:
+        return {"type": "news", "items": [], "error": str(e)}
+    items = []
+    for n in (d.get("news_results") or [])[:5]:
+        # ba'zan ichki 'stories' bo'ladi
+        if n.get("stories"):
+            n = n["stories"][0]
+        items.append({
+            "title": n.get("title", ""),
+            "link": n.get("link", ""),
+            "source": (n.get("source") or {}).get("name", "") if isinstance(n.get("source"), dict) else (n.get("source") or ""),
+            "date": n.get("date", ""),
+        })
+    return {"type": "news", "items": items}
+
+
+def image_search(query):
+    """Google rasmlaridan qidiradi."""
+    if not SERPAPI_KEY:
+        return {"type": "images", "items": []}
+    try:
+        d = _serp({"engine": "google_images", "q": query, "hl": "uz", "gl": "uz"})
+    except Exception as e:
+        return {"type": "images", "items": [], "error": str(e)}
+    items = []
+    for im in (d.get("images_results") or [])[:8]:
+        items.append({
+            "thumb": im.get("thumbnail", ""),
+            "original": im.get("original", im.get("thumbnail", "")),
+            "title": im.get("title", ""),
+            "link": im.get("link", ""),
+        })
+    return {"type": "images", "items": items}
+
+
 FACT_WORDS = ("qancha", "necha", "nechta", "qachon", "qayer", "qaysi",
               "poytaxti", "aholisi", "narxi", "ob-havo", "obhavo", "nechanchi",
               "qanaqa", "nima uchun", "kim ", "qanday qilib", "eng katta",
@@ -176,6 +224,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = web_search(query)
             self._send(200, json.dumps(result, ensure_ascii=False))
+        elif self.path == "/api/news":
+            data = self._read_body(); q = (data.get("query") or data.get("prompt") or "").strip()
+            self._send(200, json.dumps(news_search(q), ensure_ascii=False))
+        elif self.path == "/api/images":
+            data = self._read_body(); q = (data.get("query") or data.get("prompt") or "").strip()
+            self._send(200, json.dumps(image_search(q), ensure_ascii=False))
         elif self.path == "/api/chat":
             # AQLLI rejim: o'zi qaror qiladi - qidirish yoki neyron tarmoq
             data = self._read_body()
@@ -183,7 +237,14 @@ class Handler(BaseHTTPRequestHandler):
             if not q:
                 self._send(400, json.dumps({"error": "bo'sh"}))
                 return
-            if SERPAPI_KEY and is_factual(q):
+            ql = q.lower()
+            if SERPAPI_KEY and any(w in ql for w in ("rasm", "surat", "foto", "rasmini", "suratini")):
+                res = image_search(q); res["mode"] = "images"
+                self._send(200, json.dumps(res, ensure_ascii=False))
+            elif SERPAPI_KEY and any(w in ql for w in ("yangilik", "yangiliklar", "xabar", "news")):
+                res = news_search(q); res["mode"] = "news"
+                self._send(200, json.dumps(res, ensure_ascii=False))
+            elif SERPAPI_KEY and is_factual(q):
                 res = web_search(q)
                 res["mode"] = "web"
                 self._send(200, json.dumps(res, ensure_ascii=False))

@@ -99,6 +99,15 @@
   }
   .send:hover{background:var(--accent-2)}
   .send:disabled{background:#c9c7bd;cursor:default}
+  .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:10px}
+  .img-grid a{display:block;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--line)}
+  .img-grid img{width:100%;height:100%;object-fit:cover;transition:transform .2s}
+  .img-grid img:hover{transform:scale(1.05)}
+  .news-item{padding:9px 0;border-bottom:1px solid var(--line)}
+  .news-item:last-child{border:none}
+  .news-item a{color:var(--ink);text-decoration:none;font-weight:600;font-size:14.5px}
+  .news-item a:hover{color:var(--accent)}
+  .news-meta{font-size:11.5px;color:var(--muted);margin-top:2px}
   .hint{max-width:720px;margin:8px auto 0;text-align:center;font-size:11px;color:var(--muted)}
 </style>
 </head>
@@ -175,11 +184,34 @@ function showSource(body,d){
   }
 }
 function badge(body,mode){
-  if(mode){
-    const b=document.createElement('span');
-    b.className='badge '+(mode==='web'?'web':'ai');
-    b.textContent=mode==='web'?'🌐 web':'🧠 miya';
-    body.parentElement.querySelector('.who').appendChild(b);
+  if(!mode)return;
+  const map={web:['web','🌐 web'],ai:['ai','🧠 miya'],news:['web','📰 yangilik'],images:['web','🖼 rasm']};
+  const [cls,txt]=map[mode]||['ai',mode];
+  const b=document.createElement('span'); b.className='badge '+cls; b.textContent=txt;
+  body.parentElement.querySelector('.who').appendChild(b);
+}
+function renderResult(body,d){
+  badge(body,d.mode);
+  if(d.mode==='images' && d.items && d.items.length){
+    body.textContent='';
+    const g=document.createElement('div'); g.className='img-grid';
+    d.items.forEach(im=>{
+      const a=document.createElement('a'); a.href=im.link||im.original; a.target='_blank';
+      const img=document.createElement('img'); img.src=im.thumb||im.original; img.alt=im.title||'';
+      a.appendChild(img); g.appendChild(a);
+    });
+    body.parentElement.appendChild(g);
+  }else if(d.mode==='news' && d.items && d.items.length){
+    body.textContent='';
+    d.items.forEach(n=>{
+      const it=document.createElement('div'); it.className='news-item';
+      it.innerHTML=`<a href="${n.link}" target="_blank">${n.title}</a>
+        <div class="news-meta">${n.source||''}${n.date?' · '+n.date:''}</div>`;
+      body.parentElement.appendChild(it);
+    });
+  }else{
+    body.textContent=d.answer||'...';
+    showSource(body,d);
   }
 }
 
@@ -217,12 +249,12 @@ async function ask(){
       await streamAI(body,text);
     }else if(MODE==='web'){
       body.innerHTML='<span class="typing"></span>';
-      const r=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:text})});
-      const d=await r.json(); body.textContent=d.answer||'Topilmadi.'; badge(body,'web'); showSource(body,d);
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
+      const d=await r.json(); renderResult(body, d.mode?d:{...d,mode:'web'});
     }else{ // auto
       body.innerHTML='<span class="typing"></span>';
       const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
-      const d=await r.json(); body.textContent=d.answer||'...'; badge(body,d.mode); showSource(body,d);
+      const d=await r.json(); renderResult(body,d);
     }
   }catch(e){ body.textContent='[server bilan aloqa yo\'q]'; }
   send.disabled=false; main.scrollTop=main.scrollHeight; input.focus();
