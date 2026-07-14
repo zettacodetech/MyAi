@@ -134,6 +134,7 @@
       <button class="mode-btn active" data-mode="auto">✨ Aqlli</button>
       <button class="mode-btn" data-mode="ai">🧠 MyAI miya</button>
       <button class="mode-btn" data-mode="web">🌐 Web qidiruv</button>
+      <button class="mode-btn" data-mode="claude">🤖 Claude</button>
     </div>
     <div class="composer">
       <textarea id="input" rows="1" placeholder="Xabar yozing yoki savol bering..."></textarea>
@@ -215,9 +216,9 @@ function renderResult(body,d){
   }
 }
 
-async function streamAI(body,text){
+async function streamAI(body,text,url){
   body.innerHTML='<span class="typing"></span>';
-  const r=await fetch('/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+  const r=await fetch(url||'/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({prompt:text,temperature:0.7})});
   const reader=r.body.getReader(), dec=new TextDecoder();
   let acc='',out='';
@@ -247,6 +248,9 @@ async function ask(){
   try{
     if(MODE==='ai'){
       await streamAI(body,text);
+    }else if(MODE==='claude'){
+      body.parentElement.querySelector('.who').appendChild(Object.assign(document.createElement('span'),{className:'badge web',textContent:'🤖 Claude'}));
+      await streamAI(body,text,'/api/claude');
     }else if(MODE==='web'){
       body.innerHTML='<span class="typing"></span>';
       const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});

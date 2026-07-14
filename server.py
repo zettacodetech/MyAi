@@ -11,6 +11,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from model import MyAI
 
+try:
+    import anthropic
+    _ANTHROPIC_OK = True
+except Exception:
+    _ANTHROPIC_OK = False
+
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "public"
 MODEL_PATH = ROOT / "model.pkl"
@@ -34,6 +40,9 @@ def load_env():
 
 ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KEY", "")
+if ANTHROPIC_KEY and _ANTHROPIC_OK:
+    print("Claude rejimi yoqilgan (anthropic SDK)")
 if SERPAPI_KEY:
     print("Web qidiruv yoqilgan (SerpApi)")
 
@@ -224,6 +233,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = web_search(query)
             self._send(200, json.dumps(result, ensure_ascii=False))
+        elif self.path == "/api/claude":
+            self.stream_claude()
         elif self.path == "/api/news":
             data = self._read_body(); q = (data.get("query") or data.get("prompt") or "").strip()
             self._send(200, json.dumps(news_search(q), ensure_ascii=False))
@@ -283,6 +294,45 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if ch in ".?!" and len(buf.strip()) >= 12:
                     break
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_claude(self):
+        """Haqiqiy Claude (Anthropic SDK) orqali streaming javob - skill ko'rsatmasi bo'yicha."""
+        data = self._read_body()
+        prompt = (data.get("prompt") or "").strip()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            payload = json.dumps({"c": txt}, ensure_ascii=False)
+            self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        if not _ANTHROPIC_OK:
+            sse("[anthropic SDK o'rnatilmagan]")
+        elif not ANTHROPIC_KEY:
+            sse("Claude kaliti yo'q. .env ga ANTHROPIC_API_KEY qo'shing (console.anthropic.com).")
+        else:
+            try:
+                client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+                with client.messages.stream(
+                    model="claude-opus-4-8",
+                    max_tokens=2048,
+                    thinking={"type": "adaptive"},
+                    system="Sen MyAI ichidagi yordamchisan. Foydalanuvchi tilida (odatda o'zbek) qisqa va foydali javob ber.",
+                    messages=[{"role": "user", "content": prompt}],
+                ) as stream:
+                    for text in stream.text_stream:
+                        sse(text)
+            except Exception as e:
+                sse(f"[Claude xatosi: {e}]")
+        try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
