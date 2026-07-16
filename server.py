@@ -5,6 +5,7 @@ Tashqi framework yo'q, faqat Python stdlib (http.server).
 import json
 import re
 import os
+import datetime
 import urllib.request
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -43,6 +44,16 @@ def load_env():
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip()
     return env
+
+def load_system_prompt():
+    """system_prompt.txt ni o'qib, {current_date} ni bugungi sanaga almashtiradi."""
+    f = ROOT / "system_prompt.txt"
+    default = "Sen MyAI'san — o'zbek foydalanuvchilar uchun yordamchi. O'zbek tilida tabiiy javob ber."
+    if not f.exists():
+        return default
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    return f.read_text(encoding="utf-8").replace("{current_date}", today)
+
 
 ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
@@ -369,7 +380,7 @@ class Handler(BaseHTTPRequestHandler):
                     model="claude-opus-4-8",
                     max_tokens=2048,
                     thinking={"type": "adaptive"},
-                    system="Sen MyAI ichidagi yordamchisan. Foydalanuvchi tilida (odatda o'zbek) qisqa va foydali javob ber.",
+                    system=load_system_prompt(),
                     messages=[{"role": "user", "content": prompt}],
                 ) as stream:
                     for text in stream.text_stream:
