@@ -172,6 +172,23 @@ CHITCHAT = ("salom", "assalom", "qalaysiz", "qandaysiz", "rahmat", "xayr",
             "tanishaylik", "qalay", "nima gap")
 
 
+def research_context(query):
+    """SerpApi'dan qidiruv natijalarini (kontekst) yig'adi."""
+    if not SERPAPI_KEY:
+        return []
+    try:
+        d = _serp({"engine": "google", "q": query, "hl": "uz", "gl": "uz", "num": "6"})
+    except Exception:
+        return []
+    out = []
+    ab = d.get("answer_box") or {}
+    if ab.get("snippet") or ab.get("answer"):
+        out.append({"title": ab.get("title", "Answer"), "snippet": ab.get("snippet") or ab.get("answer"), "link": ab.get("link", "")})
+    for o in (d.get("organic_results") or [])[:6]:
+        out.append({"title": o.get("title", ""), "snippet": o.get("snippet", ""), "link": o.get("link", "")})
+    return out
+
+
 def is_factual(q):
     """Savol faktik (internetdan qidirish kerak)mi yoki oddiy suhbatmi?"""
     ql = q.lower()
@@ -288,6 +305,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(result, ensure_ascii=False))
         elif self.path == "/api/gemini":
             self.stream_gemini()
+        elif self.path == "/api/research":
+            self.stream_research()
         elif self.path == "/api/claude":
             self.stream_claude()
         elif self.path == "/api/news":
@@ -384,9 +403,13 @@ class Handler(BaseHTTPRequestHandler):
         else:
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{model_id}:streamGenerateContent?alt=sse")
+            uparts = [{"text": prompt}]
+            img = data.get("image")
+            if img and img.get("data"):
+                uparts.append({"inlineData": {"mimeType": img.get("mime", "image/png"), "data": img["data"]}})
             body = {
                 "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "contents": [{"role": "user", "parts": uparts}],
             }
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode("utf-8"),
@@ -431,6 +454,70 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_research(self):
+        """Deep Research: SerpApi qidiruv + Gemini sintezi (manbali javob)."""
+        data = self._read_body()
+        query = (data.get("prompt") or "").strip()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            payload = json.dumps({"c": txt}, ensure_ascii=False)
+            self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        ctx = research_context(query)
+        if not ctx:
+            sse("Qidiruv natijasi topilmadi (yoki SerpApi kaliti yo'q).")
+        elif not GEMINI_KEY:
+            sse("Gemini kaliti yo'q.")
+        else:
+            src_txt = "\n".join(f"[{i+1}] {c['title']}: {c['snippet']} ({c['link']})" for i, c in enumerate(ctx))
+            rprompt = (f"Savol: {query}\n\nInternetdan topilgan manbalar:\n{src_txt}\n\n"
+                       "Shu manbalar asosida to'liq, aniq va tuzilgan javob ber. "
+                       "Muhim faktlarda manba raqamini [1], [2] ko'rinishida ko'rsat. O'zbek tilida yoz.")
+            url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+                   "gemini-flash-latest:streamGenerateContent?alt=sse")
+            body = {
+                "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
+                "contents": [{"role": "user", "parts": [{"text": rprompt}]}],
+            }
+            req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY})
+            for attempt in range(3):
+                try:
+                    with urllib.request.urlopen(req, timeout=90) as resp:
+                        for raw in resp:
+                            raw = raw.strip()
+                            if not raw or not raw.startswith(b"data:"):
+                                continue
+                            try:
+                                obj = json.loads(raw[5:].strip())
+                                for p in obj["candidates"][0]["content"]["parts"]:
+                                    if p.get("text"):
+                                        sse(p["text"])
+                            except Exception:
+                                continue
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code in (503, 429, 500) and attempt < 2:
+                        time.sleep(1.5 * (attempt + 1)); continue
+                    sse(f"[Xato {e.code}]"); break
+                except Exception as e:
+                    sse(f"[Ulanish xatosi: {e}]"); break
+            # manbalar
+            sse("\n\n— Manbalar —\n")
+            for i, c in enumerate(ctx):
+                if c["link"]:
+                    sse(f"[{i+1}] {c['link']}\n")
+        try:
+            self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 

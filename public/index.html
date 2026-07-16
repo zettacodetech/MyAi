@@ -114,6 +114,10 @@ tailwind.config = {
   .toggle.on{ background:linear-gradient(120deg,#5b8cff,#a06bff); box-shadow:0 0 16px rgba(91,140,255,.55); }
   .toggle .knob{ position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:all .3s cubic-bezier(.3,.8,.3,1); }
   .toggle.on .knob{ left:21px; }
+  .ws{ position:fixed; top:0; right:0; height:100%; width:min(420px,92vw); z-index:70;
+    transform:translateX(100%); transition:transform .35s cubic-bezier(.2,.8,.2,1);
+    display:flex; flex-direction:column; }
+  .ws.open{ transform:translateX(0); }
   #toast{ position:fixed; left:50%; bottom:120px; transform:translateX(-50%) translateY(20px); opacity:0;
     background:rgba(18,20,36,0.85); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.1);
     padding:11px 18px; border-radius:14px; font-size:13.5px; color:#e8eaf2; z-index:80; pointer-events:none;
@@ -235,6 +239,17 @@ tailwind.config = {
     </div>
   </main>
 </div>
+<div id="ws" class="ws glass-strong">
+  <div class="flex items-center gap-3 px-5 py-4 border-b border-white/8">
+    <span id="wsTitle" class="font-bold text-[15px]">Canvas</span>
+    <button id="wsClose" class="ml-auto text-muted hover:text-ink active:scale-90 transition"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <textarea id="wsText" class="flex-1 bg-transparent outline-none resize-none p-5 text-[14.5px] leading-relaxed text-ink placeholder:text-muted font-body" placeholder="Bu yerda yozing... (avtomatik saqlanadi)"></textarea>
+  <div class="flex gap-2 px-4 py-3 border-t border-white/8">
+    <button id="wsAssist" class="grad-btn text-white text-[13px] font-semibold px-4 py-2 rounded-xl active:scale-95 transition flex items-center gap-1.5"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>MyAI davom ettir</button>
+    <button id="wsCopy" class="glass text-[13px] font-semibold px-4 py-2 rounded-xl active:scale-95 transition">Nusxa</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -252,6 +267,8 @@ const MODES = [
   { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'gemini-flash-latest', deep:true },
 ];
 let MODE = 'flash';
+let RESEARCH = false;
+let attachedImage = null;
 
 const $ = s => document.querySelector(s);
 const chat = $('#chat'), scroll = $('#scroll'), input = $('#input'), send = $('#send');
@@ -277,6 +294,7 @@ function moveGlow(){
 }
 function setMode(key){
   MODE = key;
+  RESEARCH = false; input.placeholder = "MyAI'ga xabar yozing...";
   Object.entries(segBtns).forEach(([k,b])=>{
     b.classList.toggle('text-white', k===key);
     b.classList.toggle('text-muted', k!==key);
@@ -382,7 +400,8 @@ async function ask(){
   userRow(text); scrollDown(); saveChats();
 
   const m = MODES.find(x=>x.key===MODE);
-  const {body} = aiRow(m.label);
+  const useResearch = RESEARCH;
+  const {body} = aiRow(useResearch ? '🔍 Deep Research' : m.label);
   body.innerHTML = '<span class="text-muted cursor-typing">o\'ylayapti</span>';
   send.disabled = true;
   let out = '';
@@ -391,9 +410,12 @@ async function ask(){
   if(m.deep) promptText = piNote + 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
   else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
-    const r = await fetch('/api/gemini', {
+    const _url = useResearch ? '/api/research' : '/api/gemini';
+    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model };
+    if(!useResearch && attachedImage){ _payload.image = attachedImage; }
+    const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ prompt: promptText, model: m.model })
+      body: JSON.stringify(_payload)
     });
     const reader = r.body.getReader(), dec = new TextDecoder();
     let acc='';
@@ -414,6 +436,7 @@ async function ask(){
   } catch(e){ out='[server bilan aloqa yo\'q]'; body.textContent=out; }
 
   send.disabled = false;
+  if(attachedImage){ attachedImage=null; const chip=document.getElementById('chip'); if(chip){chip.classList.add('hidden');} fileInput.value=''; }
   c.messages.push({role:'assistant', content:out, mode:MODE}); saveChats();
   scrollDown(); input.focus();
 
@@ -506,19 +529,56 @@ toolsMenu.querySelectorAll('.pop-item[data-act]').forEach(it => {
   it.onclick = e => { e.stopPropagation(); handleAct(it.dataset.act); };
 });
 function handleAct(a){
-  if(a === 'file'){ fileInput.accept = '*/*'; fileInput.click(); openMenu(false); return; }
-  if(a === 'photo'){ fileInput.accept = 'image/*'; fileInput.click(); openMenu(false); return; }
-  if(a === 'research'){ setMode('deep'); openMenu(false); toast('Deep Research (Uzoqroq fikrlash) yoqildi 🔍'); return; }
   openMenu(false);
-  const names = { notebook:'Notebooks', 'image-gen':'Rasm yaratish', music:'Musiqa yaratish', canvas:'Canvas', learn:"Ko'rsatma asosida o'rganish" };
-  toast((names[a]||'Bu vosita') + ' — tez orada qo\'shiladi ✨');
+  if(a === 'file'){ fileInput.accept = 'image/*'; fileInput.click(); return; }
+  if(a === 'photo'){ fileInput.accept = 'image/*'; fileInput.click(); return; }
+  if(a === 'research'){ RESEARCH = true; input.placeholder = "Deep Research: mavzuni yozing..."; input.focus(); toast('🔍 Deep Research yoqildi — internetdan tadqiq qiladi'); return; }
+  if(a === 'learn'){ input.value = 'Menga [MAVZU] haqida bosqichma-bosqich, misollar va mashqlar bilan interaktiv dars tayyorlab ber.'; input.focus(); autosize(); toast('[MAVZU] o\'rniga mavzuni yozing va yuboring'); return; }
+  if(a === 'canvas'){ openWorkspace('canvas'); return; }
+  if(a === 'notebook'){ openWorkspace('notebook'); return; }
+  const names = { 'image-gen':'Rasm yaratish', music:'Musiqa yaratish' };
+  toast((names[a]||'Bu vosita') + ' — Google\'ning pullik (billing) modeli kerak. Bepul kalitda mavjud emas.');
 }
+
+// ---- Ish maydoni (Canvas / Notebooks) ----
+const ws = document.getElementById('ws'), wsText = document.getElementById('wsText'), wsTitle = document.getElementById('wsTitle');
+let wsMode = 'canvas';
+function openWorkspace(mode){
+  wsMode = mode;
+  wsTitle.textContent = mode === 'canvas' ? '✍️ Canvas' : '📓 Notebook';
+  document.getElementById('wsAssist').style.display = mode === 'canvas' ? '' : 'none';
+  wsText.value = localStorage.getItem('myai-ws-' + mode) || '';
+  ws.classList.add('open'); wsText.focus();
+}
+document.getElementById('wsClose').onclick = () => ws.classList.remove('open');
+wsText.oninput = () => localStorage.setItem('myai-ws-' + wsMode, wsText.value);
+document.getElementById('wsCopy').onclick = () => { navigator.clipboard.writeText(wsText.value); toast('Nusxa olindi'); };
+document.getElementById('wsAssist').onclick = async () => {
+  const cur = wsText.value.trim();
+  const q = cur ? ('Quyidagi matnni davom ettir yoki yaxshila:\n\n' + cur) : 'Menga qiziqarli qisqa insho yoz.';
+  wsText.value = cur + '\n\n[MyAI yozmoqda...]';
+  try{
+    const r = await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:q,model:'gemini-flash-latest'})});
+    const reader=r.body.getReader(),dec=new TextDecoder(); let acc='',out='';
+    wsText.value = cur + '\n\n';
+    while(true){ const {value,done}=await reader.read(); if(done)break; acc+=dec.decode(value,{stream:true}); const parts=acc.split('\n\n'); acc=parts.pop();
+      for(const p of parts){ const line=p.replace(/^data: /,'').trim(); if(!line||line==='[DONE]')continue; try{out+=JSON.parse(line).c;}catch(e){} wsText.value=cur+'\n\n'+out; } }
+    localStorage.setItem('myai-ws-'+wsMode, wsText.value);
+  }catch(e){ toast('Xato: aloqa yo\'q'); }
+};
 fileInput.onchange = () => {
   const f = fileInput.files[0]; if(!f) return;
-  const chip = document.getElementById('chip');
-  chip.classList.remove('hidden');
-  chip.innerHTML = `<span class="chip">📎 ${f.name} <button onclick="document.getElementById('chip').classList.add('hidden');document.getElementById('fileInput').value=''" class="text-muted hover:text-white ml-1">✕</button></span>`;
-  toast('Fayl biriktirildi: ' + f.name + ' (ko\'rish uchun; to\'liq tahlil tez orada)');
+  if(!f.type.startsWith('image/')){ toast('Faqat rasm qo\'llab-quvvatlanadi (vision)'); fileInput.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const b64 = reader.result.split(',')[1];
+    attachedImage = { mime: f.type, data: b64 };
+    const chip = document.getElementById('chip'); chip.classList.remove('hidden');
+    chip.innerHTML = `<span class="chip"><img src="${reader.result}" style="width:26px;height:26px;border-radius:6px;object-fit:cover"> ${f.name} <button id="chipX" class="text-muted hover:text-white ml-1">✕</button></span>`;
+    document.getElementById('chipX').onclick = () => { attachedImage=null; chip.classList.add('hidden'); fileInput.value=''; };
+    toast('Rasm biriktirildi — savol yozing, MyAI tahlil qiladi 👁');
+  };
+  reader.readAsDataURL(f);
 };
 
 // ---------- Start ----------
