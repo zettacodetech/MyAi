@@ -77,6 +77,10 @@ tailwind.config = {
     transition:all .35s cubic-bezier(.3,.8,.3,1);
     z-index:0;
   }
+  .mic-btn.recording{ color:#ff5b7a; background:rgba(255,91,122,0.12); box-shadow:0 0 0 0 rgba(255,91,122,0.5); animation:micpulse 1.4s infinite; }
+  @keyframes micpulse{ 0%{box-shadow:0 0 0 0 rgba(255,91,122,0.45)} 70%{box-shadow:0 0 0 10px rgba(255,91,122,0)} 100%{box-shadow:0 0 0 0 rgba(255,91,122,0)} }
+  .seg-ico{ display:inline-flex; align-items:center; }
+  .seg-ico svg{ width:15px; height:15px; }
   .cursor-typing::after{ content:'▍'; color:#7aa2ff; animation:blink 1s steps(2) infinite; margin-left:1px; }
   @keyframes blink{ 50%{opacity:0} }
   /* AI text readability */
@@ -172,7 +176,7 @@ tailwind.config = {
         <!-- input -->
         <div class="glass-strong rounded-[26px] flex items-end gap-2 pl-5 pr-2 py-2 shadow-2xl shadow-black/40 focus-within:border-indigo-400/40 transition-colors">
           <textarea id="input" rows="1" placeholder="MyAI'ga xabar yozing..." class="flex-1 bg-transparent outline-none resize-none text-[15px] text-ink placeholder:text-muted py-2.5 max-h-40 font-body leading-relaxed"></textarea>
-          <button class="text-muted hover:text-ink transition p-2.5 active:scale-90" title="Mikrofon">
+          <button id="micBtn" class="mic-btn text-muted hover:text-ink transition p-2.5 active:scale-90 rounded-full" title="Ovozli kiritish">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>
           </button>
           <button id="send" class="send-btn grad-btn text-white w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-indigo-900/40 hover:brightness-110 active:scale-95 transition-all duration-200">
@@ -187,14 +191,19 @@ tailwind.config = {
 
 <script>
 // ---------- Modellar ----------
+const IC = {
+  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>',
+  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>',
+  code:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+};
 const MODES = [
-  { key:'gemini', label:'✦ Gemini',    url:'/api/gemini', stream:true },
-  { key:'auto',   label:'✨ Aqlli',     url:'/api/chat',   stream:false },
-  { key:'web',    label:'🌐 Web',       url:'/api/chat',   stream:false },
-  { key:'ai',     label:'🧠 MyAI miya', url:'/api/stream', stream:true },
-  { key:'claude', label:'🤖 Claude',    url:'/api/claude', stream:true },
+  { key:'flash-lite', label:'Flash-Lite', short:'Lite',   icon:IC.bolt,   model:'gemini-flash-lite-latest' },
+  { key:'flash',      label:'Flash',      short:'Flash',  icon:IC.spark,  model:'gemini-flash-latest' },
+  { key:'pro',        label:'Pro',        short:'Pro',    icon:IC.code,   model:'gemini-flash-latest', pro:true },
+  { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'gemini-flash-latest', deep:true },
 ];
-let MODE = 'gemini';
+let MODE = 'flash';
 
 const $ = s => document.querySelector(s);
 const chat = $('#chat'), scroll = $('#scroll'), input = $('#input'), send = $('#send');
@@ -205,8 +214,8 @@ const historyEl = $('#history');
 const segBtns = {};
 MODES.forEach(m=>{
   const b = document.createElement('button');
-  b.className = 'seg whitespace-nowrap px-4 py-2 rounded-full text-[13px] font-semibold text-muted hover:text-ink';
-  b.textContent = m.label;
+  b.className = 'seg whitespace-nowrap flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-semibold text-muted hover:text-ink transition-all duration-300';
+  b.innerHTML = `<span class="seg-ico">${m.icon}</span><span class="hidden sm:inline">${m.label}</span><span class="sm:hidden">${m.short}</span>`;
   b.onclick = ()=> setMode(m.key);
   segwrap.appendChild(b);
   segBtns[m.key] = b;
@@ -225,7 +234,7 @@ function setMode(key){
     b.classList.toggle('text-muted', k!==key);
   });
   const m = MODES.find(x=>x.key===key);
-  topModel.textContent = m.label;
+  topModel.innerHTML = `<span class="seg-ico inline-flex align-middle mr-1">${m.icon}</span>${m.label}`;
   moveGlow();
 }
 
@@ -312,65 +321,58 @@ function drawMessage(m, animate){
 }
 
 // ---------- Yuborish ----------
+let lastWasVoice = false;
 async function ask(){
   const text = input.value.trim();
   if(!text) return;
   if(!currentChat()) newChat();
   input.value=''; input.style.height='auto'; autosize();
   const c = currentChat();
-  const empt = $('#empty'); if(empt) empt.remove();
-  // user
+  const empt = document.getElementById('empty'); if(empt) empt.remove();
   c.messages.push({role:'user', content:text});
   if(c.title==='Yangi chat'){ c.title = text.slice(0,32); renderHistory(); }
-  userRow(text); scrollDown();
-  saveChats();
+  userRow(text); scrollDown(); saveChats();
 
   const m = MODES.find(x=>x.key===MODE);
-  const {body,extra} = aiRow(m.label);
+  const {body} = aiRow(m.label);
   body.innerHTML = '<span class="text-muted cursor-typing">o\'ylayapti</span>';
   send.disabled = true;
-  let saved = {role:'assistant', content:'', mode:MODE};
-
+  let out = '';
+  let promptText = text;
+  if(m.deep) promptText = 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
+  else if(m.pro) promptText = 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
-    if(m.stream){
-      const r = await fetch(m.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text,temperature:0.7})});
-      const reader = r.body.getReader(), dec = new TextDecoder();
-      let acc='', out='';
-      body.textContent=''; body.classList.add('cursor-typing');
-      while(true){
-        const {value,done} = await reader.read(); if(done) break;
-        acc += dec.decode(value,{stream:true});
-        const parts = acc.split('\n\n'); acc = parts.pop();
-        for(const p of parts){
-          const line = p.replace(/^data: /,'').trim();
-          if(!line||line==='[DONE]') continue;
-          try{ out += JSON.parse(line).c; }catch(e){}
-          body.textContent = out; scrollDown();
-        }
+    const r = await fetch('/api/gemini', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt: promptText, model: m.model })
+    });
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let acc='';
+    body.textContent=''; body.classList.add('cursor-typing');
+    while(true){
+      const {value,done} = await reader.read(); if(done) break;
+      acc += dec.decode(value,{stream:true});
+      const parts = acc.split('\n\n'); acc = parts.pop();
+      for(const p of parts){
+        const line = p.replace(/^data: /,'').trim();
+        if(!line || line==='[DONE]') continue;
+        try{ out += JSON.parse(line).c; }catch(e){}
+        body.textContent = out; scrollDown();
       }
-      body.classList.remove('cursor-typing');
-      if(!out) body.textContent='...';
-      saved.content = out||'...';
-    } else {
-      const r = await fetch(m.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
-      const d = await r.json();
-      body.textContent = d.answer || '...';
-      saved.content = d.answer||'...'; saved.mode = d.mode||MODE;
-      if(d.mode==='images' && d.items){ saved.items=d.items; saved.itemsType='images';
-        const g=document.createElement('div'); g.className='img-grid';
-        d.items.forEach(im=>{ const a=document.createElement('a'); a.href=im.link||im.original; a.target='_blank'; a.innerHTML=`<img src="${im.thumb||im.original}">`; g.appendChild(a); });
-        body.textContent=''; extra.appendChild(g);
-      } else if(d.mode==='news' && d.items){ saved.items=d.items; saved.itemsType='news';
-        body.textContent='';
-        d.items.forEach(n=>{ const it=document.createElement('div'); it.className='news-item'; it.innerHTML=`<a href="${n.link}" target="_blank">${n.title}</a><div class="text-[11.5px] text-muted mt-0.5">${n.source||''}${n.date?' · '+n.date:''}</div>`; extra.appendChild(it); });
-      }
-      if(d.source){ saved.source=d.source; saved.link=d.link; const s=document.createElement('div'); s.className='mt-3 text-[12.5px] text-muted inline-block glass px-3 py-1.5 rounded-lg'; s.innerHTML=d.link?`🔗 <a href="${d.link}" target="_blank" class="text-indigo-300 font-semibold">${d.source}</a>`:`🔗 ${d.source}`; extra.appendChild(s); }
     }
-  } catch(e){ body.textContent='[server bilan aloqa yo\'q]'; saved.content=body.textContent; }
+    body.classList.remove('cursor-typing');
+    if(!out) body.textContent = '...';
+  } catch(e){ out='[server bilan aloqa yo\'q]'; body.textContent=out; }
 
   send.disabled = false;
-  c.messages.push(saved); saveChats();
+  c.messages.push({role:'assistant', content:out, mode:MODE}); saveChats();
   scrollDown(); input.focus();
+
+  // Ovozli suhbat: agar savol ovoz bilan berilgan bo'lsa, javobni ovozda o'qiydi
+  if(lastWasVoice && out && window.speechSynthesis){
+    try{ const u=new SpeechSynthesisUtterance(out.slice(0,600)); u.lang='uz-UZ'; u.rate=1; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){}
+  }
+  lastWasVoice = false;
 }
 
 // ---------- UI hodisalar ----------
@@ -382,6 +384,34 @@ $('#newChat').onclick = ()=>{ newChat(); closeSidebarMobile(); };
 $('#menuBtn').onclick = ()=> $('#sidebar').classList.toggle('open');
 function closeSidebarMobile(){ if(window.innerWidth<860) $('#sidebar').classList.remove('open'); }
 window.addEventListener('resize', moveGlow);
+
+// ---------- Ovozli kiritish (Web Speech API) ----------
+const micBtn = document.getElementById('micBtn');
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if(SR){
+  const recog = new SR();
+  recog.lang = 'uz-UZ';
+  recog.interimResults = true;
+  recog.continuous = false;
+  let finalText = '';
+  recog.onresult = e => {
+    let t = '';
+    for(let i=0; i<e.results.length; i++) t += e.results[i][0].transcript;
+    input.value = t; autosize();
+  };
+  recog.onerror = () => micBtn.classList.remove('recording');
+  recog.onend = () => {
+    micBtn.classList.remove('recording');
+    if(input.value.trim()){ lastWasVoice = true; }
+  };
+  micBtn.onclick = () => {
+    if(micBtn.classList.contains('recording')){ recog.stop(); return; }
+    input.value=''; 
+    try{ recog.start(); micBtn.classList.add('recording'); }catch(e){}
+  };
+} else {
+  micBtn.onclick = () => alert("Brauzeringiz ovozli kiritishni qo'llab-quvvatlamaydi. Chrome ishlating.");
+}
 
 // ---------- Start ----------
 setMode('gemini');

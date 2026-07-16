@@ -376,11 +376,14 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
             self.wfile.flush()
 
+        model_id = (data.get("model") or GEMINI_MODEL)
+        if not re.match(r"^[A-Za-z0-9._-]+$", model_id):
+            model_id = GEMINI_MODEL
         if not GEMINI_KEY:
             sse("Gemini kaliti yo'q (.env da GEMINI_API_KEY).")
         else:
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                   f"{GEMINI_MODEL}:streamGenerateContent?alt=sse")
+                   f"{model_id}:streamGenerateContent?alt=sse")
             body = {
                 "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
