@@ -5,6 +5,7 @@ Tashqi framework yo'q, faqat Python stdlib (http.server).
 import json
 import re
 import os
+import time
 import datetime
 import urllib.request
 import urllib.parse
@@ -388,29 +389,42 @@ class Handler(BaseHTTPRequestHandler):
                 url, data=json.dumps(body).encode("utf-8"),
                 headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
             )
-            try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    for raw in resp:
-                        raw = raw.strip()
-                        if not raw or not raw.startswith(b"data:"):
-                            continue
-                        try:
-                            obj = json.loads(raw[5:].strip())
-                            parts = obj["candidates"][0]["content"]["parts"]
-                            for p in parts:
-                                if p.get("text"):
-                                    sse(p["text"])
-                        except Exception:
-                            continue
-            except urllib.error.HTTPError as e:
-                msg = e.read().decode("utf-8", "ignore")
+            last_err = None
+            got = False
+            for attempt in range(4):
                 try:
-                    msg = json.loads(msg)["error"]["message"][:200]
-                except Exception:
-                    msg = msg[:200]
-                sse(f"[Gemini xatosi {e.code}: {msg}]")
-            except Exception as e:
-                sse(f"[Gemini ulanish xatosi: {e}]")
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        for raw in resp:
+                            raw = raw.strip()
+                            if not raw or not raw.startswith(b"data:"):
+                                continue
+                            try:
+                                obj = json.loads(raw[5:].strip())
+                                parts = obj["candidates"][0]["content"]["parts"]
+                                for p in parts:
+                                    if p.get("text"):
+                                        got = True
+                                        sse(p["text"])
+                            except Exception:
+                                continue
+                    break  # muvaffaqiyat
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode("utf-8", "ignore")
+                    if e.code in (503, 429, 500) and attempt < 3 and not got:
+                        time.sleep(1.5 * (attempt + 1))  # band - kutib qayta uramiz
+                        continue
+                    try:
+                        last_err = json.loads(body)["error"]["message"][:200]
+                    except Exception:
+                        last_err = body[:200]
+                    sse(f"[Gemini xatosi {e.code}: {last_err}]")
+                    break
+                except Exception as e:
+                    if attempt < 3 and not got:
+                        time.sleep(1.5)
+                        continue
+                    sse(f"[Gemini ulanish xatosi: {e}]")
+                    break
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
