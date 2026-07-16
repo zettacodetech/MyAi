@@ -170,6 +170,37 @@ def is_factual(q):
     return False
 
 
+# Oddiy suhbat uchun tayyor, sifatli o'zbekcha javoblar
+INTENTS = [
+    (("assalom", "salom", "salomat"),
+     "Vaalaykum assalom! Men MyAI. Sizga qanday yordam bera olaman? 😊"),
+    (("qalaysiz", "qandaysiz", "yaxshimisiz", "qalay", "nima gap", "ishlar qalay"),
+     "Rahmat, men yaxshiman! O'zingiz qalaysiz? Biror narsa so'rang — yordam beraman."),
+    (("ismingiz", "isming", "oting", "kimsan", "kim san", "o'zing kim", "sen kimsan"),
+     "Mening ismim MyAI. Men Inomjon 0 dan qurgan sun'iy intellektman. Savollarga javob beraman va internetdan ma'lumot topaman."),
+    (("rahmat", "tashakkur", "raxmat", "minnatdor"),
+     "Arzimaydi! Doim xizmatdaman. Yana savolingiz bo'lsa, bemalol yozing. 🙌"),
+    (("xayr", "ko'rishguncha", "korishguncha", "salomat bo'ling"),
+     "Xayr! Yana keling, sizni kutaman. 👋"),
+    (("nima qila olasan", "yordam ber", "nima qilasan", "vazifang", "nima ish qilasan"),
+     "Men shularni qila olaman:\n• Savollaringizga javob beraman\n• Internetdan (Google) ma'lumot topaman\n• Yangiliklar va rasmlarni qidiraman\nSinab ko'ring — masalan: 'Toshkent aholisi qancha?'"),
+    (("zo'r", "ajoyib", "yaxshi ishlayapsan", "barakalla", "qoyil"),
+     "Rahmat! Xursandman. Yana biror narsa so'rang. 😊"),
+    (("yosh", "necha yosh", "nechchi yosh"),
+     "Men dasturman, yoshim yo'q 😄 Lekin har kuni yangi narsa o'rganaman."),
+]
+
+
+def match_intent(q):
+    """Oddiy suhbat bo'lsa tayyor javob qaytaradi, aks holda None."""
+    ql = q.lower().strip("?!. ")
+    for keys, reply in INTENTS:
+        for k in keys:
+            if k in ql:
+                return reply
+    return None
+
+
 def clean_reply(text, prompt):
     """Generatsiyani tozalaydi: promptdan keyingi qismni olib, to'liq jumla(lar) qaytaradi."""
     out = text[len(prompt):] if text.startswith(prompt) else text
@@ -255,7 +286,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"error": "bo'sh"}))
                 return
             ql = q.lower()
-            if SERPAPI_KEY and any(w in ql for w in ("rasm", "surat", "foto", "rasmini", "suratini")):
+            _intent = match_intent(q)
+            if _intent:
+                self._send(200, json.dumps({"answer": _intent, "mode": "ai"}, ensure_ascii=False))
+            elif SERPAPI_KEY and any(w in ql for w in ("rasm", "surat", "foto", "rasmini", "suratini")):
                 res = image_search(q); res["mode"] = "images"
                 self._send(200, json.dumps(res, ensure_ascii=False))
             elif SERPAPI_KEY and any(w in ql for w in ("yangilik", "yangiliklar", "xabar", "news")):
@@ -265,11 +299,15 @@ class Handler(BaseHTTPRequestHandler):
                 res = web_search(q)
                 res["mode"] = "web"
                 self._send(200, json.dumps(res, ensure_ascii=False))
+            elif SERPAPI_KEY:
+                # noma'lum bo'lsa ham internetdan qidirib ko'ramiz
+                res = web_search(q)
+                res["mode"] = "web"
+                self._send(200, json.dumps(res, ensure_ascii=False))
             else:
-                seed = q.lower()
-                raw = AI.generate(seed, n=160, temperature=0.7)
-                reply = clean_reply(raw, seed)
-                self._send(200, json.dumps({"answer": reply, "mode": "ai"}, ensure_ascii=False))
+                self._send(200, json.dumps({
+                    "answer": "Buni to'liq tushunmadim. Biror savol bering (masalan 'Yer nechta sun'iy yo'ldoshi bor?') yoki salomlashing. 😊",
+                    "mode": "ai"}, ensure_ascii=False))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
