@@ -131,9 +131,10 @@
 
   <footer>
     <div class="modes">
-      <button class="mode-btn active" data-mode="auto">✨ Aqlli</button>
-      <button class="mode-btn" data-mode="ai">🧠 MyAI miya</button>
+      <button class="mode-btn active" data-mode="gemini">✦ Gemini</button>
+      <button class="mode-btn" data-mode="auto">✨ Aqlli</button>
       <button class="mode-btn" data-mode="web">🌐 Web qidiruv</button>
+      <button class="mode-btn" data-mode="ai">🧠 MyAI miya</button>
       <button class="mode-btn" data-mode="claude">🤖 Claude</button>
     </div>
     <div class="composer">
@@ -147,7 +148,7 @@
 const chat=document.getElementById('chat'), welcome=document.getElementById('welcome');
 const input=document.getElementById('input'), send=document.getElementById('send');
 const main=document.getElementById('main'), themeBtn=document.getElementById('theme');
-let MODE='auto';
+let MODE='gemini';
 
 // Qorong'i rejim
 themeBtn.onclick=()=>{
@@ -251,6 +252,9 @@ async function ask(){
     }else if(MODE==='claude'){
       body.parentElement.querySelector('.who').appendChild(Object.assign(document.createElement('span'),{className:'badge web',textContent:'🤖 Claude'}));
       await streamAI(body,text,'/api/claude');
+    }else if(MODE==='gemini'){
+      body.parentElement.querySelector('.who').appendChild(Object.assign(document.createElement('span'),{className:'badge web',textContent:'✦ Gemini'}));
+      await streamAI(body,text,'/api/gemini');
     }else if(MODE==='web'){
       body.innerHTML='<span class="typing"></span>';
       const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});

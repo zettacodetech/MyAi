@@ -58,6 +58,10 @@ def load_system_prompt():
 ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KEY", "")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-flash-latest"
+if GEMINI_KEY:
+    print("Gemini rejimi yoqilgan")
 if ANTHROPIC_KEY and _ANTHROPIC_OK:
     print("Claude rejimi yoqilgan (anthropic SDK)")
 if SERPAPI_KEY:
@@ -281,6 +285,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = web_search(query)
             self._send(200, json.dumps(result, ensure_ascii=False))
+        elif self.path == "/api/gemini":
+            self.stream_gemini()
         elif self.path == "/api/claude":
             self.stream_claude()
         elif self.path == "/api/news":
@@ -349,6 +355,63 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if ch in ".?!" and len(buf.strip()) >= 12:
                     break
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_gemini(self):
+        """Google Gemini (bepul) orqali streaming javob."""
+        data = self._read_body()
+        prompt = (data.get("prompt") or "").strip()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            payload = json.dumps({"c": txt}, ensure_ascii=False)
+            self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        if not GEMINI_KEY:
+            sse("Gemini kaliti yo'q (.env da GEMINI_API_KEY).")
+        else:
+            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                   f"{GEMINI_MODEL}:streamGenerateContent?alt=sse")
+            body = {
+                "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            }
+            req = urllib.request.Request(
+                url, data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    for raw in resp:
+                        raw = raw.strip()
+                        if not raw or not raw.startswith(b"data:"):
+                            continue
+                        try:
+                            obj = json.loads(raw[5:].strip())
+                            parts = obj["candidates"][0]["content"]["parts"]
+                            for p in parts:
+                                if p.get("text"):
+                                    sse(p["text"])
+                        except Exception:
+                            continue
+            except urllib.error.HTTPError as e:
+                msg = e.read().decode("utf-8", "ignore")
+                try:
+                    msg = json.loads(msg)["error"]["message"][:200]
+                except Exception:
+                    msg = msg[:200]
+                sse(f"[Gemini xatosi {e.code}: {msg}]")
+            except Exception as e:
+                sse(f"[Gemini ulanish xatosi: {e}]")
+        try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
