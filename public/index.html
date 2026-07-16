@@ -97,6 +97,30 @@ tailwind.config = {
   .news-item{ padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
   .news-item a{ color:#e8eaf2; font-weight:600; text-decoration:none; font-size:14.5px; }
   .news-item a:hover{ color:#7aa2ff; }
+  /* Qo'shimcha vositalar popover */
+  .pop{ position:absolute; bottom:calc(100% + 14px); left:0; width:238px; padding:8px; border-radius:18px;
+    opacity:0; transform:scale(.94) translateY(8px); transform-origin:bottom left; pointer-events:none;
+    transition:opacity .22s cubic-bezier(.2,.85,.25,1), transform .22s cubic-bezier(.2,.85,.25,1); z-index:60;
+    box-shadow:0 24px 70px rgba(0,0,0,.55); }
+  .pop.open{ opacity:1; transform:scale(1) translateY(0); pointer-events:auto; }
+  .pop.sub{ bottom:auto; top:-8px; left:calc(100% + 12px); width:246px; transform-origin:left top; transform:scale(.94) translateX(-10px); }
+  .pop.sub.open{ transform:scale(1) translateX(0); }
+  .pop-item{ display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:13px; font-size:14px; font-weight:500; color:#c7cbd9; cursor:pointer; transition:all .18s ease; }
+  .pop-item:hover{ color:#fff; background:linear-gradient(120deg, rgba(91,140,255,.15), rgba(160,107,255,.15)); }
+  .pop-item svg{ width:18px; height:18px; opacity:.8; transition:all .18s ease; flex-shrink:0; }
+  .pop-item:hover svg{ opacity:1; color:#7aa2ff; }
+  .pop-sep{ height:1px; background:rgba(255,255,255,.07); margin:6px 6px; }
+  .toggle{ width:42px; height:24px; border-radius:9999px; background:rgba(255,255,255,.14); position:relative; transition:all .3s; flex-shrink:0; cursor:pointer; }
+  .toggle.on{ background:linear-gradient(120deg,#5b8cff,#a06bff); box-shadow:0 0 16px rgba(91,140,255,.55); }
+  .toggle .knob{ position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:all .3s cubic-bezier(.3,.8,.3,1); }
+  .toggle.on .knob{ left:21px; }
+  #toast{ position:fixed; left:50%; bottom:120px; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:rgba(18,20,36,0.85); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.1);
+    padding:11px 18px; border-radius:14px; font-size:13.5px; color:#e8eaf2; z-index:80; pointer-events:none;
+    transition:all .35s cubic-bezier(.2,.8,.2,1); box-shadow:0 12px 40px rgba(0,0,0,.4); }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .chip{ display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); padding:7px 12px; border-radius:12px; font-size:13px; }
+  @media (max-width:640px){ .pop.sub{ left:0; bottom:calc(100% + 10px); top:auto; transform-origin:bottom left; transform:scale(.94) translateY(8px);} .pop.sub.open{ transform:scale(1) translateY(0);} }
   @media (max-width:860px){ #sidebar{ position:fixed; z-index:40; height:100%; transform:translateX(-100%);} #sidebar.open{ transform:translateX(0);} }
 </style>
 </head>
@@ -174,7 +198,29 @@ tailwind.config = {
           </div>
         </div>
         <!-- input -->
-        <div class="glass-strong rounded-[26px] flex items-end gap-2 pl-5 pr-2 py-2 shadow-2xl shadow-black/40 focus-within:border-indigo-400/40 transition-colors">
+        <div id="chip" class="hidden mb-2 px-1"></div>
+        <div class="glass-strong rounded-[26px] flex items-end gap-1.5 pl-2 pr-2 py-2 shadow-2xl shadow-black/40 focus-within:border-indigo-400/40 transition-colors">
+          <div class="relative shrink-0">
+            <button id="attachBtn" class="text-muted hover:text-ink w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/5 transition active:scale-90" title="Qo'shimcha vositalar">
+              <svg id="attachIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transition:transform .28s cubic-bezier(.3,.8,.3,1)"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div id="toolsMenu" class="pop glass-strong">
+              <div class="pop-item" data-act="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Fayllarni yuklash</div>
+              <div class="pop-item" data-act="photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Suratlar</div>
+              <div class="pop-item" data-act="notebook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4a2 2 0 0 1 2-2h12v20H6a2 2 0 0 1-2-2z"/><path d="M9 2v20M4 8h5M4 16h5"/></svg>Notebooks</div>
+              <div class="pop-item" data-act="image-gen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>Rasm yaratish</div>
+              <div class="pop-item" data-act="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Musiqa yaratish</div>
+              <div class="pop-sep"></div>
+              <div class="pop-item" id="moreBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Boshqa vositalar<svg class="ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M9 18l6-6-6-6"/></svg>
+                <div id="subMenu" class="pop sub glass-strong">
+                  <div class="pop-item" data-act="canvas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Canvas</div>
+                  <div class="pop-item" data-act="research"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Deep Research</div>
+                  <div class="pop-item" data-act="learn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l10-5 10 5-10 5z"/><path d="M6 10v6c0 1 2.5 3 6 3s6-2 6-3v-6"/></svg>Ko'rsatma asosida o'rganish</div>
+                  <div class="pop-item" id="piItem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 0-4 4v1a4 4 0 0 0-2 7 4 4 0 0 0 4 6 3 3 0 0 0 6 0 4 4 0 0 0 4-6 4 4 0 0 0-2-7V6a4 4 0 0 0-4-4z"/></svg>Personal Intelligence<span id="piToggle" class="toggle ml-auto"><span class="knob"></span></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
           <textarea id="input" rows="1" placeholder="MyAI'ga xabar yozing..." class="flex-1 bg-transparent outline-none resize-none text-[15px] text-ink placeholder:text-muted py-2.5 max-h-40 font-body leading-relaxed"></textarea>
           <button id="micBtn" class="mic-btn text-muted hover:text-ink transition p-2.5 active:scale-90 rounded-full" title="Ovozli kiritish">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>
@@ -184,10 +230,12 @@ tailwind.config = {
           </button>
         </div>
         <p class="text-center text-[11px] text-muted mt-2.5">MyAI xatolarga yo'l qo'yishi mumkin. Muhim ma'lumotni tekshiring.</p>
+        <input type="file" id="fileInput" hidden>
       </div>
     </div>
   </main>
 </div>
+<div id="toast"></div>
 
 <script>
 // ---------- Modellar ----------
@@ -338,9 +386,10 @@ async function ask(){
   body.innerHTML = '<span class="text-muted cursor-typing">o\'ylayapti</span>';
   send.disabled = true;
   let out = '';
-  let promptText = text;
-  if(m.deep) promptText = 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
-  else if(m.pro) promptText = 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
+  let piNote = (localStorage.getItem('myai-pi')==='1') ? "[Eslatma: foydalanuvchi ismi Inomjon Toshmirzayev. Uni tanigin va javoblarni shaxsiylashtir.]\n" : "";
+  let promptText = piNote + text;
+  if(m.deep) promptText = piNote + 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
+  else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
     const r = await fetch('/api/gemini', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -412,6 +461,65 @@ if(SR){
 } else {
   micBtn.onclick = () => alert("Brauzeringiz ovozli kiritishni qo'llab-quvvatlamaydi. Chrome ishlating.");
 }
+
+// ---------- Qo'shimcha vositalar menyu ----------
+const attachBtn = document.getElementById('attachBtn');
+const attachIcon = document.getElementById('attachIcon');
+const toolsMenu = document.getElementById('toolsMenu');
+const subMenu = document.getElementById('subMenu');
+const moreBtn = document.getElementById('moreBtn');
+const fileInput = document.getElementById('fileInput');
+let menuOpen = false;
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window.__tt); window.__tt = setTimeout(()=> t.classList.remove('show'), 2600);
+}
+function openMenu(v){
+  menuOpen = v;
+  toolsMenu.classList.toggle('open', v);
+  if(!v) subMenu.classList.remove('open');
+  attachIcon.style.transform = v ? 'rotate(135deg)' : 'rotate(0deg)';
+}
+attachBtn.onclick = e => { e.stopPropagation(); openMenu(!menuOpen); };
+document.addEventListener('click', e => {
+  if(menuOpen && !toolsMenu.contains(e.target) && !attachBtn.contains(e.target)) openMenu(false);
+});
+// submenu — hover yoki bosish bilan
+moreBtn.addEventListener('mouseenter', ()=> subMenu.classList.add('open'));
+moreBtn.addEventListener('click', e => { e.stopPropagation(); subMenu.classList.toggle('open'); });
+
+// Personal Intelligence toggle
+const piToggle = document.getElementById('piToggle');
+let PI = localStorage.getItem('myai-pi') === '1';
+function renderPI(){ piToggle.classList.toggle('on', PI); }
+renderPI();
+document.getElementById('piItem').onclick = e => {
+  e.stopPropagation();
+  PI = !PI; localStorage.setItem('myai-pi', PI?'1':'0'); renderPI();
+  toast(PI ? 'Personal Intelligence yoqildi ✨ — sizni eslab qoladi' : "Personal Intelligence o'chirildi");
+};
+
+// Menyu amallari
+toolsMenu.querySelectorAll('.pop-item[data-act]').forEach(it => {
+  it.onclick = e => { e.stopPropagation(); handleAct(it.dataset.act); };
+});
+function handleAct(a){
+  if(a === 'file'){ fileInput.accept = '*/*'; fileInput.click(); openMenu(false); return; }
+  if(a === 'photo'){ fileInput.accept = 'image/*'; fileInput.click(); openMenu(false); return; }
+  if(a === 'research'){ setMode('deep'); openMenu(false); toast('Deep Research (Uzoqroq fikrlash) yoqildi 🔍'); return; }
+  openMenu(false);
+  const names = { notebook:'Notebooks', 'image-gen':'Rasm yaratish', music:'Musiqa yaratish', canvas:'Canvas', learn:"Ko'rsatma asosida o'rganish" };
+  toast((names[a]||'Bu vosita') + ' — tez orada qo\'shiladi ✨');
+}
+fileInput.onchange = () => {
+  const f = fileInput.files[0]; if(!f) return;
+  const chip = document.getElementById('chip');
+  chip.classList.remove('hidden');
+  chip.innerHTML = `<span class="chip">📎 ${f.name} <button onclick="document.getElementById('chip').classList.add('hidden');document.getElementById('fileInput').value=''" class="text-muted hover:text-white ml-1">✕</button></span>`;
+  toast('Fayl biriktirildi: ' + f.name + ' (ko\'rish uchun; to\'liq tahlil tez orada)');
+};
 
 // ---------- Start ----------
 setMode('gemini');
