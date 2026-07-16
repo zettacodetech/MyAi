@@ -1,0 +1,3 @@
+numpy>=1.24
+# Claude rejimi uchun (ixtiyoriy, ANTHROPIC_API_KEY bo'lsa):
+# anthropic>=0.116

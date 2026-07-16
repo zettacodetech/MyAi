@@ -16,14 +16,20 @@ try:
     _ANTHROPIC_OK = True
 except Exception:
     _ANTHROPIC_OK = False
+from transformer import MiniGPT
 
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "public"
 MODEL_PATH = ROOT / "model.pkl"
 
+GPT_PATH = ROOT / "gpt.pkl"
 print("Model yuklanmoqda...")
-AI = MyAI.load(MODEL_PATH)
-print(f"Model tayyor (vocab={AI.vocab_size})")
+try:
+    AI = MiniGPT.load(GPT_PATH)
+    print(f"Transformer yuklandi (vocab={AI.vocab_size})")
+except Exception as e:
+    AI = MyAI.load(MODEL_PATH)
+    print(f"MLP model yuklandi (Transformer topilmadi: {e})")
 
 
 def load_env():
@@ -347,4 +353,8 @@ def main(port=3070):
 
 if __name__ == "__main__":
     import sys
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 3070)
+    port = os.environ.get("PORT")
+    if port:
+        main(int(port))
+    else:
+        main(int(sys.argv[1]) if len(sys.argv) > 1 else 3070)

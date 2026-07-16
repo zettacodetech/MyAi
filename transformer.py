@@ -149,6 +149,20 @@ class MiniGPT:
             ids.append(idx)
         return self.decode(ids)
 
+    def generate_stream(self, prompt="", n=200, temperature=1.0, seed=None):
+        """generate() ning oqim versiyasi - belgilarni birma-bir qaytaradi."""
+        rng = np.random.RandomState(seed) if seed is not None else self._rng
+        ids = self.encode(prompt) or [0]
+        for _ in range(n):
+            ctx = ids[-self.block_size:]
+            logits = self.forward(np.array([ctx])).data[0, -1]
+            logits = logits/max(temperature, 1e-3)
+            logits -= logits.max()
+            p = np.exp(logits); p /= p.sum()
+            idx = int(rng.choice(self.vocab_size, p=p))
+            ids.append(idx)
+            yield self.itos[idx]
+
     # ---------- saqlash ----------
     def save(self, path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
