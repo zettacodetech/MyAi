@@ -1,276 +1,393 @@
 <!DOCTYPE html>
-<html lang="uz" data-theme="light">
+<html lang="uz" class="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MyAI — Shaxsiy sun'iy intellekt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MyAI — Sun'iy intellekt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Plus Jakarta Sans','Inter','system-ui','sans-serif'],
+        body: ['Inter','system-ui','sans-serif'],
+      },
+      colors: {
+        ink: '#e8eaf2',
+        muted: '#8a8fa3',
+        accent: '#5b8cff',
+        accent2: '#a06bff',
+      },
+      keyframes: {
+        fadeUp: { '0%': {opacity:'0', transform:'translateY(14px)'}, '100%': {opacity:'1', transform:'translateY(0)'} },
+        glowPulse: { '0%,100%': {opacity:'0.6'}, '50%': {opacity:'1'} },
+        blink: { '50%': {opacity:'0'} },
+      },
+      animation: {
+        fadeUp: 'fadeUp .5s cubic-bezier(.2,.7,.2,1) both',
+        glowPulse: 'glowPulse 3s ease-in-out infinite',
+      },
+    }
+  }
+}
+</script>
 <style>
-  :root{
-    --bg:#f0eee6; --panel:#faf9f5; --ink:#1f1e1c; --muted:#73726c;
-    --accent:#cc785c; --accent-2:#d97757; --line:#e3e1d8; --user-av:#6b6a63;
-  }
-  [data-theme="dark"]{
-    --bg:#1f1e1d; --panel:#2a2927; --ink:#f0efe9; --muted:#a3a29b;
-    --accent:#d97757; --accent-2:#e08a68; --line:#3a3936; --user-av:#8a8880;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
+  :root{ --accent:#5b8cff; --accent2:#a06bff; --cyan:#39d0ff; }
+  *{ -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
-    background:var(--bg); color:var(--ink);
-    height:100vh; display:flex; flex-direction:column;
-    transition:background .3s,color .3s;
+    font-family:'Plus Jakarta Sans',Inter,sans-serif;
+    color:#e8eaf2;
+    background:
+      radial-gradient(1200px 800px at 50% -10%, #131736 0%, #0b0d19 42%, #050508 100%),
+      #050508;
+    overflow:hidden;
   }
-  header{
-    padding:14px 22px; display:flex; align-items:center; gap:11px;
-    border-bottom:1px solid var(--line);
+  /* Glassmorphism */
+  .glass{ background:rgba(255,255,255,0.03); backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%); border:1px solid rgba(255,255,255,0.08); }
+  .glass-strong{ background:rgba(18,20,36,0.55); backdrop-filter:blur(28px) saturate(150%); -webkit-backdrop-filter:blur(28px); border:1px solid rgba(255,255,255,0.09); }
+  /* Gradient text */
+  .grad-text{ background:linear-gradient(120deg,#7aa2ff 0%,#a06bff 45%,#39d0ff 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .grad-btn{ background:linear-gradient(120deg,#5b8cff 0%,#a06bff 100%); }
+  /* Scrollbar */
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.08); border-radius:20px; }
+  ::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,0.16); }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  /* Sidebar chat hover glow */
+  .chat-item{ position:relative; transition:all .25s ease; }
+  .chat-item::before{
+    content:''; position:absolute; inset:0; border-radius:12px; opacity:0;
+    background:radial-gradient(120px 60px at var(--mx,50%) 50%, rgba(91,140,255,0.18), transparent 70%);
+    transition:opacity .3s ease; pointer-events:none;
   }
-  .logo{
-    width:32px;height:32px;border-radius:8px;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));
-    display:flex;align-items:center;justify-content:center;
-    color:#fff;font-weight:800;font-size:17px;
-    box-shadow:0 2px 8px rgba(204,120,92,.3);
+  .chat-item:hover::before{ opacity:1; }
+  .chat-item:hover{ background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.09); }
+  .chat-item.active{ background:rgba(91,140,255,0.10); border-color:rgba(91,140,255,0.25); }
+  /* Segmented control glow */
+  .seg{ position:relative; transition:color .3s ease; z-index:1; }
+  .seg-glow{
+    position:absolute; top:4px; bottom:4px; border-radius:9999px;
+    background:linear-gradient(120deg,rgba(91,140,255,0.9),rgba(160,107,255,0.9));
+    box-shadow:0 0 24px 2px rgba(91,140,255,0.45), inset 0 0 12px rgba(255,255,255,0.15);
+    transition:all .35s cubic-bezier(.3,.8,.3,1);
+    z-index:0;
   }
-  header h1{font-size:17px;font-weight:600;letter-spacing:-.2px}
-  header .tag{font-size:11.5px;color:var(--muted);margin-left:6px}
-  .theme-btn{
-    margin-left:auto;background:none;border:1px solid var(--line);
-    width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:15px;
-    color:var(--ink);transition:.15s;
-  }
-  .theme-btn:hover{background:var(--panel)}
-
-  main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
-  .wrap{width:100%;max-width:720px;margin:0 auto;padding:24px 20px;flex:1}
-
-  .welcome{text-align:center;margin:auto 0;padding:36px 0;animation:fade .5s ease}
-  .welcome .big{
-    width:60px;height:60px;border-radius:16px;margin:0 auto 20px;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));
-    display:flex;align-items:center;justify-content:center;color:#fff;font-size:30px;font-weight:800;
-    box-shadow:0 4px 16px rgba(204,120,92,.35);
-  }
-  .welcome h2{font-size:29px;font-weight:500;letter-spacing:-.5px;margin-bottom:10px;font-family:Georgia,serif}
-  .welcome p{color:var(--muted);font-size:15px;max-width:440px;margin:0 auto;line-height:1.6}
-
-  .msg{display:flex;gap:12px;margin-bottom:22px;line-height:1.65;animation:fade .35s ease}
-  .msg .av{
-    width:28px;height:28px;border-radius:7px;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;
-  }
-  .msg.user .av{background:var(--user-av)}
-  .msg.ai .av{background:linear-gradient(135deg,var(--accent),var(--accent-2))}
-  .msg .body{padding-top:3px;font-size:15.5px;white-space:pre-wrap;flex:1}
-  .msg .who{font-size:12px;color:var(--muted);margin-bottom:2px;font-weight:600}
-  .typing{color:var(--muted)}
-  .typing::after{content:'▋';animation:blink 1s steps(2) infinite}
-  .cursor::after{content:'▋';color:var(--accent);animation:blink 1s steps(2) infinite}
-  .source{font-size:12.5px;color:var(--muted);margin-top:8px;padding:7px 11px;background:var(--bg);border:1px solid var(--line);border-radius:9px;display:inline-block}
-  .source a{color:var(--accent);text-decoration:none;font-weight:600}
-  .source a:hover{text-decoration:underline}
-  .badge{font-size:10.5px;padding:2px 7px;border-radius:6px;margin-left:8px;font-weight:600;vertical-align:middle}
-  .badge.web{background:rgba(204,120,92,.15);color:var(--accent)}
-  .badge.ai{background:rgba(120,120,120,.15);color:var(--muted)}
-
-  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  @keyframes blink{50%{opacity:0}}
-
-  footer{border-top:1px solid var(--line);background:var(--bg);padding:12px 20px;transition:background .3s}
-  .modes{max-width:720px;margin:0 auto 9px;display:flex;gap:6px;justify-content:center}
-  .mode-btn{
-    border:1px solid var(--line);background:var(--panel);color:var(--muted);
-    padding:5px 13px;border-radius:20px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s;
-  }
-  .mode-btn:hover{border-color:var(--accent)}
-  .mode-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-  .composer{
-    max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;
-    background:var(--panel);border:1px solid var(--line);border-radius:16px;
-    padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:border .15s;
-  }
-  .composer:focus-within{border-color:var(--accent)}
-  .composer textarea{
-    flex:1;border:none;outline:none;resize:none;background:transparent;
-    font-family:inherit;font-size:15px;color:var(--ink);max-height:140px;line-height:1.5;
-  }
-  .send{
-    width:34px;height:34px;border:none;border-radius:9px;cursor:pointer;flex-shrink:0;
-    background:var(--accent);color:#fff;font-size:16px;transition:background .15s;
-  }
-  .send:hover{background:var(--accent-2)}
-  .send:disabled{background:#c9c7bd;cursor:default}
-  .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:10px}
-  .img-grid a{display:block;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--line)}
-  .img-grid img{width:100%;height:100%;object-fit:cover;transition:transform .2s}
-  .img-grid img:hover{transform:scale(1.05)}
-  .news-item{padding:9px 0;border-bottom:1px solid var(--line)}
-  .news-item:last-child{border:none}
-  .news-item a{color:var(--ink);text-decoration:none;font-weight:600;font-size:14.5px}
-  .news-item a:hover{color:var(--accent)}
-  .news-meta{font-size:11.5px;color:var(--muted);margin-top:2px}
-  .hint{max-width:720px;margin:8px auto 0;text-align:center;font-size:11px;color:var(--muted)}
+  .cursor-typing::after{ content:'▍'; color:#7aa2ff; animation:blink 1s steps(2) infinite; margin-left:1px; }
+  @keyframes blink{ 50%{opacity:0} }
+  /* AI text readability */
+  .ai-body{ line-height:1.75; font-size:15.5px; color:#dfe2ee; font-family:Inter,sans-serif; white-space:pre-wrap; word-break:break-word; }
+  .ai-body a{ color:#7aa2ff; text-decoration:none; } .ai-body a:hover{ text-decoration:underline; }
+  .user-bubble{ background:#20222e; border:1px solid rgba(255,255,255,0.06); border-radius:20px; border-bottom-right-radius:7px; }
+  .send-btn:disabled{ opacity:.4; cursor:default; }
+  .fu{ animation:fadeUp .5s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes fadeUp{ 0%{opacity:0; transform:translateY(14px)} 100%{opacity:1; transform:none} }
+  .img-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; margin-top:12px; }
+  .img-grid a{ display:block; border-radius:12px; overflow:hidden; aspect-ratio:1; border:1px solid rgba(255,255,255,0.06); }
+  .img-grid img{ width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+  .img-grid img:hover{ transform:scale(1.06); }
+  .news-item{ padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .news-item a{ color:#e8eaf2; font-weight:600; text-decoration:none; font-size:14.5px; }
+  .news-item a:hover{ color:#7aa2ff; }
+  @media (max-width:860px){ #sidebar{ position:fixed; z-index:40; height:100%; transform:translateX(-100%);} #sidebar.open{ transform:translateX(0);} }
 </style>
 </head>
 <body>
-  <header>
-    <div class="logo">M</div>
-    <h1>MyAI</h1>
-    <span class="tag">0 dan qurilgan · web qidiruvli</span>
-    <button class="theme-btn" id="theme" title="Rejim">🌙</button>
-  </header>
+<div class="flex h-screen w-screen">
 
-  <main id="main">
-    <div class="wrap" id="chat">
-      <div class="welcome" id="welcome">
-        <div class="big">M</div>
-        <h2>Salom! Men MyAI</h2>
-        <p>Men 0 dan qurilgan neyron tarmoqman. Oddiy gaplashsangiz — o'zim javob beraman; biror narsa so'rasangiz — internetdan (Google) topib beraman.</p>
+  <!-- ============ SIDEBAR ============ -->
+  <aside id="sidebar" class="glass-strong w-[280px] shrink-0 flex flex-col transition-transform duration-300">
+    <!-- logo -->
+    <div class="flex items-center gap-3 px-5 pt-5 pb-4">
+      <div class="w-9 h-9 rounded-xl grad-btn flex items-center justify-center font-extrabold text-white shadow-lg shadow-indigo-900/40">M</div>
+      <div>
+        <div class="font-extrabold text-[17px] tracking-tight">MyAI</div>
+        <div class="text-[11px] text-muted -mt-0.5">Sun'iy intellekt</div>
+      </div>
+    </div>
+
+    <!-- new chat -->
+    <div class="px-4 pb-2">
+      <button id="newChat" class="w-full grad-btn text-white font-semibold text-[14px] py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/40 hover:brightness-110 active:scale-95 transition-all duration-200">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Yangi chat
+      </button>
+    </div>
+
+    <!-- history -->
+    <div class="flex-1 overflow-y-auto px-3 py-2">
+      <div class="text-[11px] font-semibold text-muted px-2 pb-2 uppercase tracking-wider">Chatlar</div>
+      <div id="history" class="flex flex-col gap-1"></div>
+    </div>
+
+    <!-- profile -->
+    <div class="px-3 py-3 border-t border-white/5">
+      <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold text-white text-sm">IT</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-[13.5px] font-semibold truncate">Inomjon Toshmirzayev</div>
+          <div class="text-[11px] text-muted">Bepul reja</div>
+        </div>
+        <button class="text-muted hover:text-ink transition-colors active:scale-90" title="Sozlamalar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 flex flex-col min-w-0 relative">
+    <!-- top bar -->
+    <header class="h-14 flex items-center gap-3 px-5 shrink-0">
+      <button id="menuBtn" class="md:hidden text-muted hover:text-ink active:scale-90 transition"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+      <div class="flex items-center gap-2 text-[13px] text-muted">
+        <span id="topModel" class="grad-text font-semibold">✦ Gemini</span>
+      </div>
+    </header>
+
+    <!-- messages / empty state -->
+    <div id="scroll" class="flex-1 overflow-y-auto">
+      <div id="chat" class="max-w-[760px] mx-auto px-5 py-6 w-full">
+        <div id="empty" class="min-h-[62vh] flex flex-col items-center justify-center text-center fu">
+          <div class="w-16 h-16 rounded-2xl grad-btn flex items-center justify-center text-3xl font-extrabold text-white shadow-2xl shadow-indigo-900/50 mb-7 animate-glowPulse">M</div>
+          <h1 class="text-[34px] md:text-[42px] font-extrabold leading-tight tracking-tight grad-text max-w-[560px]">Tayyor bo'lsangiz,<br>men ham tayyorman</h1>
+          <p class="text-muted mt-4 text-[15px] max-w-[420px]">Savol bering, kod yozdiring yoki suhbatlashing. Pastda modelni tanlang.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- composer -->
+    <div class="shrink-0 px-4 pb-5 pt-1">
+      <div class="max-w-[760px] mx-auto">
+        <!-- segmented control -->
+        <div class="flex justify-center mb-3">
+          <div id="segwrap" class="glass rounded-full p-1 flex relative overflow-x-auto max-w-full">
+            <div id="segGlow" class="seg-glow"></div>
+          </div>
+        </div>
+        <!-- input -->
+        <div class="glass-strong rounded-[26px] flex items-end gap-2 pl-5 pr-2 py-2 shadow-2xl shadow-black/40 focus-within:border-indigo-400/40 transition-colors">
+          <textarea id="input" rows="1" placeholder="MyAI'ga xabar yozing..." class="flex-1 bg-transparent outline-none resize-none text-[15px] text-ink placeholder:text-muted py-2.5 max-h-40 font-body leading-relaxed"></textarea>
+          <button class="text-muted hover:text-ink transition p-2.5 active:scale-90" title="Mikrofon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>
+          </button>
+          <button id="send" class="send-btn grad-btn text-white w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-indigo-900/40 hover:brightness-110 active:scale-95 transition-all duration-200">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+        <p class="text-center text-[11px] text-muted mt-2.5">MyAI xatolarga yo'l qo'yishi mumkin. Muhim ma'lumotni tekshiring.</p>
       </div>
     </div>
   </main>
-
-  <footer>
-    <div class="modes">
-      <button class="mode-btn active" data-mode="gemini">✦ Gemini</button>
-      <button class="mode-btn" data-mode="auto">✨ Aqlli</button>
-      <button class="mode-btn" data-mode="web">🌐 Web qidiruv</button>
-      <button class="mode-btn" data-mode="ai">🧠 MyAI miya</button>
-      <button class="mode-btn" data-mode="claude">🤖 Claude</button>
-    </div>
-    <div class="composer">
-      <textarea id="input" rows="1" placeholder="Xabar yozing yoki savol bering..."></textarea>
-      <button class="send" id="send">↑</button>
-    </div>
-    <div class="hint">MyAI — o'zimiz qurgan AI 🌱 · Web qidiruv oyiga 250 marta</div>
-  </footer>
+</div>
 
 <script>
-const chat=document.getElementById('chat'), welcome=document.getElementById('welcome');
-const input=document.getElementById('input'), send=document.getElementById('send');
-const main=document.getElementById('main'), themeBtn=document.getElementById('theme');
-let MODE='gemini';
+// ---------- Modellar ----------
+const MODES = [
+  { key:'gemini', label:'✦ Gemini',    url:'/api/gemini', stream:true },
+  { key:'auto',   label:'✨ Aqlli',     url:'/api/chat',   stream:false },
+  { key:'web',    label:'🌐 Web',       url:'/api/chat',   stream:false },
+  { key:'ai',     label:'🧠 MyAI miya', url:'/api/stream', stream:true },
+  { key:'claude', label:'🤖 Claude',    url:'/api/claude', stream:true },
+];
+let MODE = 'gemini';
 
-// Qorong'i rejim
-themeBtn.onclick=()=>{
-  const cur=document.documentElement.getAttribute('data-theme');
-  const next=cur==='dark'?'light':'dark';
-  document.documentElement.setAttribute('data-theme',next);
-  themeBtn.textContent=next==='dark'?'☀️':'🌙';
-  localStorage.setItem('myai-theme',next);
-};
-if(localStorage.getItem('myai-theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');themeBtn.textContent='☀️';}
+const $ = s => document.querySelector(s);
+const chat = $('#chat'), scroll = $('#scroll'), input = $('#input'), send = $('#send');
+const segwrap = $('#segwrap'), segGlow = $('#segGlow'), topModel = $('#topModel');
+const historyEl = $('#history');
 
-// Rejim tugmalari
-document.querySelectorAll('.mode-btn').forEach(b=>{
-  b.onclick=()=>{
-    document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active'); MODE=b.dataset.mode;
-  };
+// ---------- Segmented control ----------
+const segBtns = {};
+MODES.forEach(m=>{
+  const b = document.createElement('button');
+  b.className = 'seg whitespace-nowrap px-4 py-2 rounded-full text-[13px] font-semibold text-muted hover:text-ink';
+  b.textContent = m.label;
+  b.onclick = ()=> setMode(m.key);
+  segwrap.appendChild(b);
+  segBtns[m.key] = b;
 });
-
-function addMsg(who,text,cls){
-  const m=document.createElement('div');
-  m.className='msg '+cls;
-  m.innerHTML=`<div class="av">${cls==='user'?'S':'M'}</div>
-    <div style="flex:1"><div class="who">${who}</div><div class="body"></div></div>`;
-  m.querySelector('.body').textContent=text;
-  chat.appendChild(m); main.scrollTop=main.scrollHeight;
-  return m.querySelector('.body');
+function moveGlow(){
+  const b = segBtns[MODE];
+  if(!b) return;
+  segGlow.style.left = b.offsetLeft + 'px';
+  segGlow.style.width = b.offsetWidth + 'px';
+  segGlow.style.opacity = '1';
 }
-function showSource(body,d){
-  if(d && d.source){
-    const s=document.createElement('div');
-    s.className='source';
-    s.innerHTML=d.link?`🔗 <a href="${d.link}" target="_blank">${d.source}</a>`:`🔗 ${d.source}`;
-    body.parentElement.appendChild(s);
-  }
-}
-function badge(body,mode){
-  if(!mode)return;
-  const map={web:['web','🌐 web'],ai:['ai','🧠 miya'],news:['web','📰 yangilik'],images:['web','🖼 rasm']};
-  const [cls,txt]=map[mode]||['ai',mode];
-  const b=document.createElement('span'); b.className='badge '+cls; b.textContent=txt;
-  body.parentElement.querySelector('.who').appendChild(b);
-}
-function renderResult(body,d){
-  badge(body,d.mode);
-  if(d.mode==='images' && d.items && d.items.length){
-    body.textContent='';
-    const g=document.createElement('div'); g.className='img-grid';
-    d.items.forEach(im=>{
-      const a=document.createElement('a'); a.href=im.link||im.original; a.target='_blank';
-      const img=document.createElement('img'); img.src=im.thumb||im.original; img.alt=im.title||'';
-      a.appendChild(img); g.appendChild(a);
-    });
-    body.parentElement.appendChild(g);
-  }else if(d.mode==='news' && d.items && d.items.length){
-    body.textContent='';
-    d.items.forEach(n=>{
-      const it=document.createElement('div'); it.className='news-item';
-      it.innerHTML=`<a href="${n.link}" target="_blank">${n.title}</a>
-        <div class="news-meta">${n.source||''}${n.date?' · '+n.date:''}</div>`;
-      body.parentElement.appendChild(it);
-    });
-  }else{
-    body.textContent=d.answer||'...';
-    showSource(body,d);
-  }
+function setMode(key){
+  MODE = key;
+  Object.entries(segBtns).forEach(([k,b])=>{
+    b.classList.toggle('text-white', k===key);
+    b.classList.toggle('text-muted', k!==key);
+  });
+  const m = MODES.find(x=>x.key===key);
+  topModel.textContent = m.label;
+  moveGlow();
 }
 
-async function streamAI(body,text,url){
-  body.innerHTML='<span class="typing"></span>';
-  const r=await fetch(url||'/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({prompt:text,temperature:0.7})});
-  const reader=r.body.getReader(), dec=new TextDecoder();
-  let acc='',out='';
-  body.textContent=''; body.classList.add('cursor');
-  while(true){
-    const {value,done}=await reader.read(); if(done)break;
-    acc+=dec.decode(value,{stream:true});
-    const parts=acc.split('\n\n'); acc=parts.pop();
-    for(const p of parts){
-      const line=p.replace(/^data: /,'').trim();
-      if(!line||line==='[DONE]')continue;
-      try{out+=JSON.parse(line).c;}catch(e){}
-      body.textContent=out; main.scrollTop=main.scrollHeight;
+// ---------- Chat tarixi (localStorage) ----------
+let chats = JSON.parse(localStorage.getItem('myai-chats')||'[]');
+let currentId = null;
+function saveChats(){ localStorage.setItem('myai-chats', JSON.stringify(chats)); }
+function currentChat(){ return chats.find(c=>c.id===currentId); }
+
+function renderHistory(){
+  historyEl.innerHTML='';
+  chats.slice().reverse().forEach(c=>{
+    const d = document.createElement('div');
+    d.className = 'chat-item flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-transparent cursor-pointer text-[13.5px] '+(c.id===currentId?'active':'');
+    d.innerHTML = `<svg width="15" height="15" class="shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="truncate flex-1 text-ink/90">${c.title}</span>`;
+    d.onmousemove = e => d.style.setProperty('--mx', (e.offsetX)+'px');
+    d.onclick = ()=> loadChat(c.id);
+    historyEl.appendChild(d);
+  });
+}
+function newChat(){
+  currentId = 'c'+Date.now();
+  chats.push({ id:currentId, title:'Yangi chat', messages:[] });
+  saveChats(); renderHistory(); renderMessages();
+}
+function loadChat(id){ currentId=id; renderHistory(); renderMessages(); closeSidebarMobile(); }
+
+// ---------- Xabarlarni chizish ----------
+function renderMessages(){
+  const c = currentChat();
+  chat.innerHTML='';
+  if(!c || !c.messages.length){
+    const e = document.createElement('div');
+    e.id='empty';
+    e.className='min-h-[62vh] flex flex-col items-center justify-center text-center fu';
+    e.innerHTML = `<div class="w-16 h-16 rounded-2xl grad-btn flex items-center justify-center text-3xl font-extrabold text-white shadow-2xl shadow-indigo-900/50 mb-7 animate-glowPulse">M</div>
+      <h1 class="text-[34px] md:text-[42px] font-extrabold leading-tight tracking-tight grad-text max-w-[560px]">Tayyor bo'lsangiz,<br>men ham tayyorman</h1>
+      <p class="text-muted mt-4 text-[15px] max-w-[420px]">Savol bering, kod yozdiring yoki suhbatlashing. Pastda modelni tanlang.</p>`;
+    chat.appendChild(e);
+    return;
+  }
+  c.messages.forEach(m=> drawMessage(m, false));
+  scrollDown();
+}
+
+function userRow(text){
+  const w = document.createElement('div');
+  w.className = 'flex justify-end mb-6 fu';
+  w.innerHTML = `<div class="user-bubble px-4 py-3 max-w-[80%] text-[15px] text-ink leading-relaxed">${escapeHtml(text)}</div>`;
+  chat.appendChild(w);
+}
+function aiRow(modeLabel){
+  const w = document.createElement('div');
+  w.className = 'mb-8 fu';
+  w.innerHTML = `
+    <div class="flex items-center gap-2 mb-2.5">
+      <div class="w-6 h-6 rounded-lg grad-btn flex items-center justify-center text-[11px] font-bold text-white">M</div>
+      <span class="text-[13px] font-bold">MyAI <span class="grad-text">✨</span></span>
+      <span class="text-[11px] text-muted px-2 py-0.5 rounded-full glass">${modeLabel||''}</span>
+    </div>
+    <div class="ai-body pl-8"></div>
+    <div class="pl-8 extra"></div>`;
+  chat.appendChild(w);
+  return { body: w.querySelector('.ai-body'), extra: w.querySelector('.extra') };
+}
+function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function scrollDown(){ scroll.scrollTop = scroll.scrollHeight; }
+
+function drawMessage(m, animate){
+  if(m.role==='user'){ userRow(m.content); return; }
+  const modeLabel = MODES.find(x=>x.key===(m.mode||MODE))?.label || '';
+  const {body,extra} = aiRow(modeLabel);
+  body.textContent = m.content||'';
+  if(m.items && m.items.length){
+    if(m.itemsType==='images'){
+      const g=document.createElement('div'); g.className='img-grid';
+      m.items.forEach(im=>{ const a=document.createElement('a'); a.href=im.link||im.original; a.target='_blank'; a.innerHTML=`<img src="${im.thumb||im.original}" alt="">`; g.appendChild(a); });
+      extra.appendChild(g);
+    } else {
+      m.items.forEach(n=>{ const it=document.createElement('div'); it.className='news-item'; it.innerHTML=`<a href="${n.link}" target="_blank">${n.title}</a><div class="text-[11.5px] text-muted mt-0.5">${n.source||''}${n.date?' · '+n.date:''}</div>`; extra.appendChild(it); });
     }
   }
-  body.classList.remove('cursor');
-  if(!out)body.textContent='...';
+  if(m.source){ const s=document.createElement('div'); s.className='mt-3 text-[12.5px] text-muted inline-block glass px-3 py-1.5 rounded-lg'; s.innerHTML = m.link?`🔗 <a href="${m.link}" target="_blank" class="text-indigo-300 font-semibold">${m.source}</a>`:`🔗 ${m.source}`; extra.appendChild(s); }
 }
 
+// ---------- Yuborish ----------
 async function ask(){
-  const text=input.value.trim(); if(!text)return;
-  if(welcome)welcome.remove();
-  input.value=''; input.style.height='auto';
-  addMsg('Siz',text,'user');
-  const body=addMsg('MyAI','','ai');
-  send.disabled=true;
-  try{
-    if(MODE==='ai'){
-      await streamAI(body,text);
-    }else if(MODE==='claude'){
-      body.parentElement.querySelector('.who').appendChild(Object.assign(document.createElement('span'),{className:'badge web',textContent:'🤖 Claude'}));
-      await streamAI(body,text,'/api/claude');
-    }else if(MODE==='gemini'){
-      body.parentElement.querySelector('.who').appendChild(Object.assign(document.createElement('span'),{className:'badge web',textContent:'✦ Gemini'}));
-      await streamAI(body,text,'/api/gemini');
-    }else if(MODE==='web'){
-      body.innerHTML='<span class="typing"></span>';
-      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
-      const d=await r.json(); renderResult(body, d.mode?d:{...d,mode:'web'});
-    }else{ // auto
-      body.innerHTML='<span class="typing"></span>';
-      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
-      const d=await r.json(); renderResult(body,d);
+  const text = input.value.trim();
+  if(!text) return;
+  if(!currentChat()) newChat();
+  input.value=''; input.style.height='auto'; autosize();
+  const c = currentChat();
+  const empt = $('#empty'); if(empt) empt.remove();
+  // user
+  c.messages.push({role:'user', content:text});
+  if(c.title==='Yangi chat'){ c.title = text.slice(0,32); renderHistory(); }
+  userRow(text); scrollDown();
+  saveChats();
+
+  const m = MODES.find(x=>x.key===MODE);
+  const {body,extra} = aiRow(m.label);
+  body.innerHTML = '<span class="text-muted cursor-typing">o\'ylayapti</span>';
+  send.disabled = true;
+  let saved = {role:'assistant', content:'', mode:MODE};
+
+  try {
+    if(m.stream){
+      const r = await fetch(m.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text,temperature:0.7})});
+      const reader = r.body.getReader(), dec = new TextDecoder();
+      let acc='', out='';
+      body.textContent=''; body.classList.add('cursor-typing');
+      while(true){
+        const {value,done} = await reader.read(); if(done) break;
+        acc += dec.decode(value,{stream:true});
+        const parts = acc.split('\n\n'); acc = parts.pop();
+        for(const p of parts){
+          const line = p.replace(/^data: /,'').trim();
+          if(!line||line==='[DONE]') continue;
+          try{ out += JSON.parse(line).c; }catch(e){}
+          body.textContent = out; scrollDown();
+        }
+      }
+      body.classList.remove('cursor-typing');
+      if(!out) body.textContent='...';
+      saved.content = out||'...';
+    } else {
+      const r = await fetch(m.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text})});
+      const d = await r.json();
+      body.textContent = d.answer || '...';
+      saved.content = d.answer||'...'; saved.mode = d.mode||MODE;
+      if(d.mode==='images' && d.items){ saved.items=d.items; saved.itemsType='images';
+        const g=document.createElement('div'); g.className='img-grid';
+        d.items.forEach(im=>{ const a=document.createElement('a'); a.href=im.link||im.original; a.target='_blank'; a.innerHTML=`<img src="${im.thumb||im.original}">`; g.appendChild(a); });
+        body.textContent=''; extra.appendChild(g);
+      } else if(d.mode==='news' && d.items){ saved.items=d.items; saved.itemsType='news';
+        body.textContent='';
+        d.items.forEach(n=>{ const it=document.createElement('div'); it.className='news-item'; it.innerHTML=`<a href="${n.link}" target="_blank">${n.title}</a><div class="text-[11.5px] text-muted mt-0.5">${n.source||''}${n.date?' · '+n.date:''}</div>`; extra.appendChild(it); });
+      }
+      if(d.source){ saved.source=d.source; saved.link=d.link; const s=document.createElement('div'); s.className='mt-3 text-[12.5px] text-muted inline-block glass px-3 py-1.5 rounded-lg'; s.innerHTML=d.link?`🔗 <a href="${d.link}" target="_blank" class="text-indigo-300 font-semibold">${d.source}</a>`:`🔗 ${d.source}`; extra.appendChild(s); }
     }
-  }catch(e){ body.textContent='[server bilan aloqa yo\'q]'; }
-  send.disabled=false; main.scrollTop=main.scrollHeight; input.focus();
+  } catch(e){ body.textContent='[server bilan aloqa yo\'q]'; saved.content=body.textContent; }
+
+  send.disabled = false;
+  c.messages.push(saved); saveChats();
+  scrollDown(); input.focus();
 }
 
-send.onclick=ask;
-input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask();}});
-input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,140)+'px';});
+// ---------- UI hodisalar ----------
+function autosize(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,160)+'px'; }
+input.addEventListener('input', autosize);
+input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); ask(); }});
+send.onclick = ask;
+$('#newChat').onclick = ()=>{ newChat(); closeSidebarMobile(); };
+$('#menuBtn').onclick = ()=> $('#sidebar').classList.toggle('open');
+function closeSidebarMobile(){ if(window.innerWidth<860) $('#sidebar').classList.remove('open'); }
+window.addEventListener('resize', moveGlow);
+
+// ---------- Start ----------
+setMode('gemini');
+if(chats.length){ currentId = chats[chats.length-1].id; } else { newChat(); }
+renderHistory(); renderMessages();
+setTimeout(moveGlow, 60);
 </script>
 </body>
 </html>
