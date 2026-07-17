@@ -69,6 +69,7 @@ FIREFLIES_KEY = os.environ.get("FIREFLIES_API_KEY") or ENV.get("FIREFLIES_API_KE
 MEDIASTACK_KEY = os.environ.get("MEDIASTACK_API_KEY") or ENV.get("MEDIASTACK_API_KEY", "")
 AISHA_KEY = os.environ.get("AISHA_API_KEY") or ENV.get("AISHA_API_KEY", "")
 HF_KEY = os.environ.get("HF_API_KEY") or ENV.get("HF_API_KEY", "")
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY") or ENV.get("OPENROUTER_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -487,6 +488,8 @@ class Handler(BaseHTTPRequestHandler):
             self.stream_gemini()
         elif self.path == "/api/hf":
             self.stream_hf()
+        elif self.path == "/api/openrouter":
+            self.stream_openrouter()
         elif self.path == "/api/research":
             self.stream_research()
         elif self.path == "/api/claude":
@@ -758,6 +761,59 @@ class Handler(BaseHTTPRequestHandler):
                 sse(f"[HF xatosi {e.code}: {msg}]")
             except Exception as e:
                 sse(f"[HF ulanish xatosi: {e}]")
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_openrouter(self):
+        """OpenRouter (GPT-4o va boshqalar) OpenAI-mos streaming."""
+        data = self._read_body()
+        prompt = (data.get("prompt") or "").strip()
+        model = data.get("model") or "openai/gpt-4o-mini"
+        if not re.match(r"^[A-Za-z0-9._/:-]+$", model):
+            model = "openai/gpt-4o-mini"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            self.wfile.write(f"data: {json.dumps({'c': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        if not OPENROUTER_KEY:
+            sse("OpenRouter kaliti yo'q.")
+        else:
+            body = {"model": model, "stream": True, "max_tokens": 1024,
+                    "messages": [{"role": "system", "content": load_system_prompt()},
+                                 {"role": "user", "content": prompt}]}
+            req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Authorization": "Bearer " + OPENROUTER_KEY, "Content-Type": "application/json",
+                         "HTTP-Referer": "https://myai.app", "X-Title": "MyAI"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    for raw in resp:
+                        raw = raw.strip()
+                        if not raw or not raw.startswith(b"data:"):
+                            continue
+                        chunk = raw[5:].strip()
+                        if chunk == b"[DONE]":
+                            break
+                        try:
+                            delta = json.loads(chunk)["choices"][0].get("delta", {})
+                            if delta.get("content"):
+                                sse(delta["content"])
+                        except Exception:
+                            continue
+            except urllib.error.HTTPError as e:
+                msg = e.read().decode("utf-8", "ignore")[:150]
+                sse(f"[OpenRouter xatosi {e.code}: {msg}]")
+            except Exception as e:
+                sse(f"[OpenRouter ulanish xatosi: {e}]")
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()

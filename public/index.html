@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://js.puter.com/v2/"></script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -419,6 +420,7 @@ const MODES = [
   { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'gemini-flash-latest', deep:true },
   { key:'llama',      label:'Llama 3.3', short:'Llama', icon:IC.spark, model:'meta-llama/Llama-3.3-70B-Instruct', provider:'hf' },
   { key:'deepseek',   label:'DeepSeek', short:'DeepSeek', icon:IC.code, model:'deepseek-ai/DeepSeek-V3', provider:'hf' },
+  { key:'gpt4o',      label:'GPT-4o', short:'GPT-4o', icon:IC.spark, model:'openai/gpt-4o', provider:'openrouter' },
 ];
 let MODE = 'flash';
 let RESEARCH = false;
@@ -430,7 +432,7 @@ const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu 
 const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
-const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)' };
+const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)' };
 MODES.forEach(m=>{
   const it = document.createElement('div');
   it.className = 'pop-item';
@@ -575,9 +577,9 @@ async function ask(){
   if(m.deep) promptText = piNote + 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
   else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
-    const _url = useResearch ? '/api/research' : (m.provider==='hf' ? '/api/hf' : '/api/gemini');
+    const _url = useResearch ? '/api/research' : (m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
     const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model };
-    if(!useResearch && m.provider!=='hf' && attachedImage){ _payload.image = attachedImage; }
+    if(!useResearch && !m.provider && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(_payload)
@@ -743,8 +745,28 @@ function handleAct(a){
       }).catch(()=>toast('Aloqa xatosi'));
     return;
   }
-  const names = { 'image-gen':'Rasm yaratish', music:'Musiqa yaratish' };
-  toast((names[a]||'Bu vosita') + ' — Google\'ning pullik (billing) modeli kerak. Bepul kalitda mavjud emas.');
+  if(a === 'image-gen'){
+    const p = input.value.trim();
+    if(!p){ toast("Avval rasm tavsifini yozing (masalan: 'tog' ustida quyosh botishi'), keyin bosing"); return; }
+    if(!window.puter){ toast('Puter yuklanmadi, sahifani yangilang'); return; }
+    const empt = document.getElementById('empty'); if(empt) empt.remove();
+    if(!currentChat()) newChat();
+    userRow(p);
+    const row = aiRow('🎨 Rasm (Puter)');
+    row.body.innerHTML = '<span class="text-muted cursor-typing">rasm yaratilyapti</span>';
+    input.value=''; autosize(); scrollDown();
+    puter.ai.txt2img(p).then(img => {
+      row.body.innerHTML = '';
+      img.style.maxWidth = '100%'; img.style.borderRadius = '14px'; img.style.marginTop = '4px';
+      row.body.appendChild(img);
+      if(currentChat()){ currentChat().messages.push({role:'user',content:p},{role:'assistant',content:'🎨 [rasm yaratildi]',mode:'flash'}); saveChats(); }
+      scrollDown();
+    }).catch(e => { row.body.textContent = '[Rasm yaratilmadi: ' + (e.message||e) + ']. Puter hisobiga kirish so\'ralishi mumkin.'; });
+    return;
+  }
+  if(a === 'music'){ toast("Musiqa yaratish — tez orada"); return; }
+  const names = { music:'Musiqa yaratish' };
+  toast((names[a]||'Bu vosita') + ' — tez orada');
 }
 
 // ---- Ish maydoni (Canvas / Notebooks) ----
