@@ -486,6 +486,16 @@ def _openai_gen(url, key, model, prompt, extra=None, history=None):
                 continue
 
 
+import re as _re_think
+def _strip_think(text):
+    """qwen/reasoning modellarning <think>...</think> qismini olib tashlaydi."""
+    if not text:
+        return text
+    t = _re_think.sub(r"(?is)<think>.*?</think>", "", text)
+    t = _re_think.sub(r"(?is)<think>.*", "", t)  # yopilmagan <think>
+    return t.strip()
+
+
 def _is_junk(text):
     """Axlat/rad javoblarni aniqlaydi (juda qisqa yoki xizmat matni)."""
     t = (text or "").strip()
@@ -515,8 +525,8 @@ def _collect(kind, spec, prompt, history=None):
                                       {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}, history))
             return "" if _is_junk(out) else out
         if kind == "groq":
-            out = "".join(_openai_gen("https://api.groq.com/openai/v1/chat/completions",
-                                      GROQ_KEY, spec, prompt, None, history))
+            out = _strip_think("".join(_openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                      GROQ_KEY, spec, prompt, None, history)))
             return "" if _is_junk(out) else out
     except Exception:
         return ""
@@ -861,7 +871,7 @@ class Handler(BaseHTTPRequestHandler):
             if not streamed and GROQ_KEY:
                 try:
                     for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
-                                             GROQ_KEY, "llama-3.3-70b-versatile", rprompt):
+                                             GROQ_KEY, "openai/gpt-oss-120b", rprompt):
                         streamed = True; sse(chunk)
                 except Exception:
                     streamed = False
@@ -945,7 +955,7 @@ class Handler(BaseHTTPRequestHandler):
             if GROQ_KEY:
                 try:
                     for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
-                                             GROQ_KEY, "llama-3.3-70b-versatile", q, None, history):
+                                             GROQ_KEY, "openai/gpt-oss-120b", q, None, history):
                         streamed = True; sse(chunk)
                 except Exception:
                     streamed = False
@@ -971,16 +981,19 @@ class Handler(BaseHTTPRequestHandler):
             if GEMINI_KEYS:
                 tasks.append(("gemini", GEMINI_KEYS))
             if GROQ_KEY:
+                # Groq'dan 2 ta kuchli xilma-xil model
+                tasks.append(("groq", "openai/gpt-oss-120b"))
                 tasks.append(("groq", "llama-3.3-70b-versatile"))
+                if deep:
+                    # Chuqur rejim: qwen reasoning modeli (bosqichma-bosqich fikrlaydi)
+                    tasks.append(("groq", "qwen/qwen3-32b"))
             if OPENROUTER_KEY:
                 tasks.append(("or", "openrouter/free"))
-            if HF_KEY:
-                tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
 
             sse_status("\U0001F91D Bir necha AI birga o'ylayapti...")
             answers = []  # (kind, text) juftliklari
             try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
                     futs = [(k, ex.submit(_collect, k, s, q, history)) for k, s in tasks]
                     for kind, f in futs:
                         a = f.result()
@@ -1019,10 +1032,10 @@ class Handler(BaseHTTPRequestHandler):
                         except Exception:
                             streamed = False
                     if not streamed and GROQ_KEY:
-                        # Gemini band bo'lsa - Groq bilan sintez (ishonchli)
+                        # Gemini band bo'lsa - Groq gpt-oss-120b bilan sintez (kuchli)
                         try:
                             for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
-                                                     GROQ_KEY, "llama-3.3-70b-versatile", synth):
+                                                     GROQ_KEY, "openai/gpt-oss-120b", synth):
                                 streamed = True
                                 sse(chunk)
                         except Exception:
