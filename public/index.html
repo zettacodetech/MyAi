@@ -9,6 +9,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://js.puter.com/v2/"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -427,6 +428,7 @@ const MODES = [
 let MODE = 'myai';
 let RESEARCH = false;
 let attachedImage = null;
+let attachedDoc = null;
 
 const $ = s => document.querySelector(s);
 const chat = $('#chat'), scroll = $('#scroll'), input = $('#input'), send = $('#send');
@@ -505,12 +507,23 @@ function userRow(text){
   chat.appendChild(w);
 }
 let _readAudio = null;
+function cleanForSpeech(t){
+  if(!t) return '';
+  return t
+    .replace(/```[\s\S]*?```/g,' kod bloki ')   // kod bloklari
+    .replace(/`[^`]*`/g,' ')                        // inline kod
+    .replace(/https?:\/\/\S+/g,' ')               // havolalar
+    .replace(/[*_#>~|]/g,'')                        // markdown belgilari
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/gu,'') // emoji
+    .replace(/\s{2,}/g,' ')
+    .trim();
+}
 async function readAloud(text, btn){
   if(!text || !text.trim()){ toast("O'qishga matn yo'q"); return; }
   if(_readAudio){ try{_readAudio.pause();}catch(e){} _readAudio=null; }
   if(btn) btn.classList.add('text-indigo-400');
   try{
-    const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,900)})});
+    const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cleanForSpeech(text).slice(0,900)})});
     const d = await r.json();
     if(d.audio){ const a=new Audio(d.audio); _readAudio=a; a.onended=()=>{ if(btn) btn.classList.remove('text-indigo-400'); _readAudio=null; }; a.onerror=()=>{ if(btn) btn.classList.remove('text-indigo-400'); }; a.play(); }
     else { toast('Ovoz xatosi'); if(btn) btn.classList.remove('text-indigo-400'); }
@@ -575,7 +588,8 @@ async function ask(){
   send.disabled = true;
   let out = '';
   let piNote = (localStorage.getItem('myai-pi')==='1') ? "[Eslatma: foydalanuvchi ismi Inomjon Toshmirzayev. Uni tanigin va javoblarni shaxsiylashtir.]\n" : "";
-  let promptText = piNote + text;
+  let docCtx = attachedDoc ? `[Foydalanuvchi "${attachedDoc.name}" hujjatini biriktirdi. Matni:\n${attachedDoc.text}\n]\n\nShu hujjatga asoslanib javob ber.\n\n` : '';
+  let promptText = piNote + docCtx + text;
   if(m.deep) promptText = piNote + 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
   else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
@@ -597,8 +611,12 @@ async function ask(){
       for(const p of parts){
         const line = p.replace(/^data: /,'').trim();
         if(!line || line==='[DONE]') continue;
-        try{ out += JSON.parse(line).c; }catch(e){}
-        body.textContent = out; scrollDown();
+        let obj; try{ obj = JSON.parse(line); }catch(e){ continue; }
+        if(obj.s !== undefined){ // progress status - javobga qo'shilmaydi
+          if(!out){ body.innerHTML = `<span class=\"text-muted cursor-typing\">${obj.s}</span>`; scrollDown(); }
+          continue;
+        }
+        if(obj.c !== undefined){ out += obj.c; body.textContent = out; scrollDown(); }
       }
     }
     body.classList.remove('cursor-typing');
@@ -606,7 +624,7 @@ async function ask(){
   } catch(e){ out='[server bilan aloqa yo\'q]'; body.textContent=out; }
 
   send.disabled = false;
-  if(attachedImage){ attachedImage=null; const chip=document.getElementById('chip'); if(chip){chip.classList.add('hidden');} fileInput.value=''; }
+  if(attachedImage || attachedDoc){ attachedImage=null; attachedDoc=null; const chip=document.getElementById('chip'); if(chip){chip.classList.add('hidden');} fileInput.value=''; }
   c.messages.push({role:'assistant', content:out, mode:MODE}); saveChats();
   scrollDown(); input.focus();
 
@@ -700,7 +718,7 @@ toolsMenu.querySelectorAll('.pop-item[data-act]').forEach(it => {
 });
 function handleAct(a){
   openMenu(false);
-  if(a === 'file'){ fileInput.accept = 'image/*'; fileInput.click(); return; }
+  if(a === 'file'){ fileInput.accept = 'image/*,.pdf,.txt,.md,.csv'; fileInput.click(); return; }
   if(a === 'photo'){ fileInput.accept = 'image/*'; fileInput.click(); return; }
   if(a === 'research'){ RESEARCH = true; input.placeholder = "Deep Research: mavzuni yozing..."; input.focus(); toast('🔍 Deep Research yoqildi — internetdan tadqiq qiladi'); return; }
   if(a === 'learn'){ input.value = 'Menga [MAVZU] haqida bosqichma-bosqich, misollar va mashqlar bilan interaktiv dars tayyorlab ber.'; input.focus(); autosize(); toast('[MAVZU] o\'rniga mavzuni yozing va yuboring'); return; }
@@ -798,19 +816,66 @@ document.getElementById('wsAssist').onclick = async () => {
     localStorage.setItem('myai-ws-'+wsMode, wsText.value);
   }catch(e){ toast('Xato: aloqa yo\'q'); }
 };
-fileInput.onchange = () => {
+function showDocChip(name){
+  const chip = document.getElementById('chip'); chip.classList.remove('hidden');
+  chip.innerHTML = `<span class="chip">📄 ${name} <button id="chipX" class="text-muted hover:text-white ml-1">✕</button></span>`;
+  document.getElementById('chipX').onclick = () => { attachedDoc=null; chip.classList.add('hidden'); fileInput.value=''; };
+}
+async function extractPdf(f){
+  const buf = await f.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let txt='';
+  const N = Math.min(pdf.numPages, 30);
+  for(let i=1;i<=N;i++){
+    const page = await pdf.getPage(i);
+    const c = await page.getTextContent();
+    txt += c.items.map(x=>x.str).join(' ') + '\n';
+  }
+  return txt.trim();
+}
+fileInput.onchange = async () => {
   const f = fileInput.files[0]; if(!f) return;
-  if(!f.type.startsWith('image/')){ toast('Faqat rasm qo\'llab-quvvatlanadi (vision)'); fileInput.value=''; return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const b64 = reader.result.split(',')[1];
-    attachedImage = { mime: f.type, data: b64 };
-    const chip = document.getElementById('chip'); chip.classList.remove('hidden');
-    chip.innerHTML = `<span class="chip"><img src="${reader.result}" style="width:26px;height:26px;border-radius:6px;object-fit:cover"> ${f.name} <button id="chipX" class="text-muted hover:text-white ml-1">✕</button></span>`;
-    document.getElementById('chipX').onclick = () => { attachedImage=null; chip.classList.add('hidden'); fileInput.value=''; };
-    toast('Rasm biriktirildi — savol yozing, MyAI tahlil qiladi 👁');
-  };
-  reader.readAsDataURL(f);
+  // Rasm -> vision
+  if(f.type.startsWith('image/')){
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result.split(',')[1];
+      attachedImage = { mime: f.type, data: b64 }; attachedDoc=null;
+      const chip = document.getElementById('chip'); chip.classList.remove('hidden');
+      chip.innerHTML = `<span class="chip"><img src="${reader.result}" style="width:26px;height:26px;border-radius:6px;object-fit:cover"> ${f.name} <button id="chipX" class="text-muted hover:text-white ml-1">✕</button></span>`;
+      document.getElementById('chipX').onclick = () => { attachedImage=null; chip.classList.add('hidden'); fileInput.value=''; };
+      toast('Rasm biriktirildi — savol yozing, MyAI tahlil qiladi 👁');
+    };
+    reader.readAsDataURL(f);
+    return;
+  }
+  // PDF -> matn ajratish
+  if(f.type==='application/pdf' || f.name.toLowerCase().endsWith('.pdf')){
+    toast('📄 PDF o\'qilyapti...');
+    try{
+      if(!window.pdfjsLib){ toast('PDF kutubxonasi yuklanmadi'); fileInput.value=''; return; }
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const txt = await extractPdf(f);
+      if(!txt){ toast('PDF dan matn topilmadi (skan bo\'lishi mumkin)'); fileInput.value=''; return; }
+      attachedDoc = { name:f.name, text:txt.slice(0,12000) }; attachedImage=null;
+      showDocChip(f.name);
+      toast('📄 Hujjat biriktirildi — savol bering, MyAI o\'qib javob beradi');
+    }catch(e){ toast('PDF o\'qishda xatolik'); fileInput.value=''; }
+    return;
+  }
+  // Matn/CSV/MD
+  if(f.type.startsWith('text/') || /\.(txt|md|csv)$/i.test(f.name)){
+    const reader = new FileReader();
+    reader.onload = () => {
+      attachedDoc = { name:f.name, text:(reader.result||'').slice(0,12000) }; attachedImage=null;
+      showDocChip(f.name);
+      toast('📄 Hujjat biriktirildi — savol bering');
+    };
+    reader.readAsText(f);
+    return;
+  }
+  toast('Bu fayl turi qo\'llab-quvvatlanmaydi');
+  fileInput.value='';
 };
 
 // ========== OVOZLI MULOQOT ==========
@@ -877,11 +942,12 @@ const VM = {
     this.setState('thinking');
     vTranscript.textContent = text;
     try{
-      const res = await fetch('/api/gemini',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prompt:text, model:'gemini-flash-latest' }) });
+      const _vh = (typeof currentChat==='function' && currentChat()) ? (currentChat().messages||[]).slice(-6).map(x=>({role:x.role,content:x.content})) : [];
+      const res = await fetch('/api/myai',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prompt:text, history:_vh }) });
       const reader = res.body.getReader(), dec = new TextDecoder();
       let acc='', out='';
       while(true){ const {value,done}=await reader.read(); if(done) break; acc+=dec.decode(value,{stream:true}); const parts=acc.split('\n\n'); acc=parts.pop();
-        for(const p of parts){ const line=p.replace(/^data: /,'').trim(); if(!line||line==='[DONE]') continue; try{ out+=JSON.parse(line).c; }catch(e){} } }
+        for(const p of parts){ const line=p.replace(/^data: /,'').trim(); if(!line||line==='[DONE]') continue; try{ const o=JSON.parse(line); if(o.c!==undefined) out+=o.c; }catch(e){} } }
       if(typeof currentChat==='function' && currentChat()){ currentChat().messages.push({role:'user',content:text},{role:'assistant',content:out,mode:'flash'}); saveChats(); }
       this.speak(out || "Kechirasiz, javob topolmadim.");
     }catch(e){ this.speak("Aloqa xatosi yuz berdi."); }
@@ -899,7 +965,7 @@ const VM = {
     vTranscript.textContent = text.slice(0,220);
     // Aisha o'zbek ovozi (asosiy)
     try{
-      const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,900)})});
+      const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cleanForSpeech(text).slice(0,900)})});
       const d = await r.json();
       if(d.audio){
         const audio = new Audio(d.audio);
@@ -911,7 +977,7 @@ const VM = {
       }
     }catch(e){}
     // Zaxira: brauzer ovozi (turk fonetikasi)
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
     const v = this.pickVoice();
     if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'tr-TR'; }
     u.rate = 0.97; u.pitch = 1.02;

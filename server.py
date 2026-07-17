@@ -849,8 +849,16 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(f"data: {json.dumps({'c': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
             self.wfile.flush()
 
+        def sse_status(txt):
+            try:
+                self.wfile.write(f"data: {json.dumps({'s': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
         # 0. Rasm bo'lsa: faqat Gemini "ko'radi" - vision'ga yo'naltiramiz
         if image and image.get("data"):
+            sse_status("\U0001F441 Rasm tahlil qilinmoqda...")
             vprompt = prompt or "Bu rasmda nima bor? Batafsil tushuntir."
             try:
                 got = False
@@ -870,6 +878,7 @@ class Handler(BaseHTTPRequestHandler):
         # 1. Kerak bo'lsa internet ma'lumoti
         q = prompt
         if SERPAPI_KEY and is_factual(prompt):
+            sse_status("\U0001F310 Internetdan qidirilmoqda...")
             try:
                 ctx = research_context(prompt)
                 if ctx:
@@ -887,6 +896,7 @@ class Handler(BaseHTTPRequestHandler):
         if HF_KEY:
             tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
 
+        sse_status("\U0001F91D Bir necha AI birga o'ylayapti...")
         answers = []  # (kind, text) juftliklari
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
@@ -911,6 +921,7 @@ class Handler(BaseHTTPRequestHandler):
             elif len(answers) == 1:
                 sse(answers[0][1])
             else:
+                sse_status("\u2728 Eng yaxshi javob tayyorlanmoqda...")
                 texts = [t for _, t in answers]
                 blocks = "\n\n".join(f"=== Javob {i+1} ===\n{t[:2500]}" for i, t in enumerate(texts))
                 synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n{blocks}\n\n"
