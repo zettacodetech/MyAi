@@ -71,6 +71,7 @@ MEDIASTACK_KEY = os.environ.get("MEDIASTACK_API_KEY") or ENV.get("MEDIASTACK_API
 AISHA_KEY = os.environ.get("AISHA_API_KEY") or ENV.get("AISHA_API_KEY", "")
 HF_KEY = os.environ.get("HF_API_KEY") or ENV.get("HF_API_KEY", "")
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY") or ENV.get("OPENROUTER_KEY", "")
+GROQ_KEY = os.environ.get("GROQ_KEY") or ENV.get("GROQ_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -473,6 +474,10 @@ def _collect(kind, spec, prompt, history=None):
                                       OPENROUTER_KEY, spec, prompt,
                                       {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}, history))
             return "" if _is_junk(out) else out
+        if kind == "groq":
+            out = "".join(_openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                      GROQ_KEY, spec, prompt, None, history))
+            return "" if _is_junk(out) else out
     except Exception:
         return ""
     return ""
@@ -563,7 +568,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"error": "matn bo'sh"}, ensure_ascii=False)); return
             self._send(200, json.dumps(aisha_tts(txt), ensure_ascii=False)); return
         if self.path == "/api/worldnews":
-            self._send(200, json.dumps(mediastack_news(8), ensure_ascii=False)); return
+            # SerpApi google_news (ishonchli); mediastack 403 bergani uchun
+            ns = news_search("dunyo yangiliklari bugun")
+            items = [{"title": n.get("title"), "url": n.get("link"),
+                      "source": n.get("source"), "date": n.get("date")}
+                     for n in ns.get("items", []) if n.get("title")]
+            if not items and MEDIASTACK_KEY:
+                self._send(200, json.dumps(mediastack_news(8), ensure_ascii=False)); return
+            self._send(200, json.dumps({"items": items}, ensure_ascii=False)); return
         if self.path == "/api/fireflies":
             self._send(200, json.dumps(fireflies_meetings(10), ensure_ascii=False)); return
         if self.path == "/api/ocoya":
@@ -783,42 +795,29 @@ class Handler(BaseHTTPRequestHandler):
         ctx = research_context(query)
         if not ctx:
             sse("Qidiruv natijasi topilmadi (yoki SerpApi kaliti yo'q).")
-        elif not GEMINI_KEY:
-            sse("Gemini kaliti yo'q.")
+        elif not (GEMINI_KEYS or GROQ_KEY):
+            sse("AI kaliti yo'q.")
         else:
             src_txt = "\n".join(f"[{i+1}] {c['title']}: {c['snippet']} ({c['link']})" for i, c in enumerate(ctx))
             rprompt = (f"Savol: {query}\n\nInternetdan topilgan manbalar:\n{src_txt}\n\n"
                        "Shu manbalar asosida to'liq, aniq va tuzilgan javob ber. "
                        "Muhim faktlarda manba raqamini [1], [2] ko'rinishida ko'rsat. O'zbek tilida yoz.")
-            url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-                   "gemini-flash-latest:streamGenerateContent?alt=sse")
-            body = {
-                "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
-                "contents": [{"role": "user", "parts": [{"text": rprompt}]}],
-            }
-            req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
-                headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY})
-            for attempt in range(3):
+            streamed = False
+            if GEMINI_KEYS:
                 try:
-                    with urllib.request.urlopen(req, timeout=90) as resp:
-                        for raw in resp:
-                            raw = raw.strip()
-                            if not raw or not raw.startswith(b"data:"):
-                                continue
-                            try:
-                                obj = json.loads(raw[5:].strip())
-                                for p in obj["candidates"][0]["content"]["parts"]:
-                                    if p.get("text"):
-                                        sse(p["text"])
-                            except Exception:
-                                continue
-                    break
-                except urllib.error.HTTPError as e:
-                    if e.code in (503, 429, 500) and attempt < 2:
-                        time.sleep(1.5 * (attempt + 1)); continue
-                    sse(f"[Xato {e.code}]"); break
-                except Exception as e:
-                    sse(f"[Ulanish xatosi: {e}]"); break
+                    for chunk in _gemini_gen(GEMINI_KEYS, rprompt):
+                        streamed = True; sse(chunk)
+                except Exception:
+                    streamed = False
+            if not streamed and GROQ_KEY:
+                try:
+                    for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                             GROQ_KEY, "llama-3.3-70b-versatile", rprompt):
+                        streamed = True; sse(chunk)
+                except Exception:
+                    streamed = False
+            if not streamed:
+                sse("Hozir modellar band, lekin manbalar quyida.")
             # manbalar
             sse("\n\n— Manbalar —\n")
             for i, c in enumerate(ctx):
@@ -891,6 +890,8 @@ class Handler(BaseHTTPRequestHandler):
         tasks = []
         if GEMINI_KEYS:
             tasks.append(("gemini", GEMINI_KEYS))
+        if GROQ_KEY:
+            tasks.append(("groq", "llama-3.3-70b-versatile"))
         if OPENROUTER_KEY:
             tasks.append(("or", "openrouter/free"))
         if HF_KEY:
@@ -899,7 +900,7 @@ class Handler(BaseHTTPRequestHandler):
         sse_status("\U0001F91D Bir necha AI birga o'ylayapti...")
         answers = []  # (kind, text) juftliklari
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
                 futs = [(k, ex.submit(_collect, k, s, q, history)) for k, s in tasks]
                 for kind, f in futs:
                     a = f.result()
@@ -912,7 +913,8 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[myai] {len(answers)} javob: {[k for k,_ in answers]}", file=_s.stderr)
         # Gemini eng sifatli - fallback uchun ajratib olamiz
         gem = next((t for k, t in answers if k == "gemini"), None)
-        best_raw = gem or (max((t for _, t in answers), key=len) if answers else None)
+        grq = next((t for k, t in answers if k == "groq"), None)
+        best_raw = gem or grq or (max((t for _, t in answers), key=len) if answers else None)
 
         # 3. Sintez: javoblarni birlashtirib eng yaxshi yagona javob
         try:
@@ -932,6 +934,15 @@ class Handler(BaseHTTPRequestHandler):
                 if GEMINI_KEYS:
                     try:
                         for chunk in _gemini_gen(GEMINI_KEYS, synth):
+                            streamed = True
+                            sse(chunk)
+                    except Exception:
+                        streamed = False
+                if not streamed and GROQ_KEY:
+                    # Gemini band bo'lsa - Groq bilan sintez (ishonchli)
+                    try:
+                        for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                                 GROQ_KEY, "llama-3.3-70b-versatile", synth):
                             streamed = True
                             sse(chunk)
                     except Exception:

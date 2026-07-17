@@ -18,8 +18,9 @@ def load_env():
                 k, v = ln.split("=", 1); env[k.strip()] = v.strip()
     return env
 ENV = load_env()
+GROQ_KEY = os.environ.get("GROQ_KEY") or ENV.get("GROQ_KEY", "")
 OR_KEY = os.environ.get("OPENROUTER_KEY") or ENV.get("OPENROUTER_KEY", "")
-MODEL = os.environ.get("MYAI_CLI_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+MODEL = os.environ.get("MYAI_CLI_MODEL", "llama-3.3-70b-versatile")
 
 class C:
     R="\033[0m"; B="\033[1m"; DIM="\033[2m"; GRN="\033[32m"; YEL="\033[33m"
@@ -64,10 +65,14 @@ def exec_tool(name, args):
 
 def call(messages):
     body = {"model": MODEL, "messages": messages, "tools": TOOLS, "tool_choice": "auto", "max_tokens": 2048}
-    req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Authorization": f"Bearer {OR_KEY}", "Content-Type": "application/json",
-                 "HTTP-Referer": "https://myai.app", "X-Title": "MyAI CLI"})
+    if GROQ_KEY:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 MyAI-CLI/1.0"}
+    else:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {OR_KEY}", "Content-Type": "application/json",
+                   "HTTP-Referer": "https://myai.app", "X-Title": "MyAI CLI", "User-Agent": "Mozilla/5.0 MyAI-CLI/1.0"}
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers)
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["choices"][0]["message"]
 
