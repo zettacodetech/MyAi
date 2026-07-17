@@ -226,9 +226,7 @@ tailwind.config = {
     <!-- top bar -->
     <header class="h-14 flex items-center gap-3 px-5 shrink-0">
       <button id="menuBtn" class="md:hidden text-muted hover:text-ink active:scale-90 transition"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-      <div class="flex items-center gap-2 text-[13px] text-muted">
-        <span id="topModel" class="grad-text font-semibold">✦ Gemini</span>
-      </div>
+
     </header>
 
     <!-- messages / empty state -->
@@ -247,12 +245,6 @@ tailwind.config = {
     <!-- composer -->
     <div class="shrink-0 px-4 pb-5 pt-1">
       <div class="max-w-[760px] mx-auto">
-        <!-- segmented control -->
-        <div class="flex justify-center mb-3">
-          <div id="segwrap" class="glass rounded-full p-1 flex relative overflow-x-auto max-w-full">
-            <div id="segGlow" class="seg-glow"></div>
-          </div>
-        </div>
         <!-- input -->
         <div id="chip" class="hidden mb-2 px-1"></div>
         <div class="glass-strong rounded-[26px] flex items-end gap-1.5 pl-2 pr-2 py-2 shadow-2xl shadow-black/40 focus-within:border-indigo-400/40 transition-colors">
@@ -278,6 +270,13 @@ tailwind.config = {
             </div>
           </div>
           <textarea id="input" rows="1" placeholder="MyAI'ga xabar yozing..." class="flex-1 bg-transparent outline-none resize-none text-[15px] text-ink placeholder:text-muted py-2.5 max-h-40 font-body leading-relaxed"></textarea>
+          <div class="relative shrink-0 self-center">
+            <button id="modelBtn" class="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[13px] font-semibold text-muted hover:text-ink hover:bg-white/5 transition active:scale-95">
+              <span id="modelBtnLabel">Flash</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div id="modelMenu" class="pop glass-strong" style="left:auto; right:0; width:256px"></div>
+          </div>
           <button id="micBtn" class="mic-btn text-muted hover:text-ink transition p-2.5 active:scale-90 rounded-full" title="Ovozli kiritish">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>
           </button>
@@ -396,37 +395,29 @@ let attachedImage = null;
 
 const $ = s => document.querySelector(s);
 const chat = $('#chat'), scroll = $('#scroll'), input = $('#input'), send = $('#send');
-const segwrap = $('#segwrap'), segGlow = $('#segGlow'), topModel = $('#topModel');
+const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu = $('#modelMenu');
 const historyEl = $('#history');
 
-// ---------- Segmented control ----------
-const segBtns = {};
+// ---------- Model selektori (input ichida) ----------
+const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish' };
 MODES.forEach(m=>{
-  const b = document.createElement('button');
-  b.className = 'seg whitespace-nowrap flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-semibold text-muted hover:text-ink transition-all duration-300';
-  b.innerHTML = `<span class="seg-ico">${m.icon}</span><span class="hidden sm:inline">${m.label}</span><span class="sm:hidden">${m.short}</span>`;
-  b.onclick = ()=> setMode(m.key);
-  segwrap.appendChild(b);
-  segBtns[m.key] = b;
+  const it = document.createElement('div');
+  it.className = 'pop-item';
+  it.dataset.key = m.key;
+  it.innerHTML = `<span class="seg-ico">${m.icon}</span><div class="flex-1"><div class="text-[13.5px] font-semibold">${m.label}</div><div class="text-[11.5px] text-muted">${MODEL_DESC[m.key]||''}</div></div><span class="mch text-indigo-300" style="opacity:0">✓</span>`;
+  it.onclick = e => { e.stopPropagation(); setMode(m.key); modelMenu.classList.remove('open'); };
+  modelMenu.appendChild(it);
 });
-function moveGlow(){
-  const b = segBtns[MODE];
-  if(!b) return;
-  segGlow.style.left = b.offsetLeft + 'px';
-  segGlow.style.width = b.offsetWidth + 'px';
-  segGlow.style.opacity = '1';
-}
+function moveGlow(){}
 function setMode(key){
   MODE = key;
   RESEARCH = false; input.placeholder = "MyAI'ga xabar yozing...";
-  Object.entries(segBtns).forEach(([k,b])=>{
-    b.classList.toggle('text-white', k===key);
-    b.classList.toggle('text-muted', k!==key);
-  });
-  const m = MODES.find(x=>x.key===key);
-  topModel.innerHTML = `<span class="seg-ico inline-flex align-middle mr-1">${m.icon}</span>${m.label}`;
-  moveGlow();
+  const m = MODES.find(x=>x.key===key); if(!m) return;
+  modelBtnLabel.textContent = m.label;
+  modelMenu.querySelectorAll('.pop-item').forEach(it=>{ it.querySelector('.mch').style.opacity = (it.dataset.key===key)?'1':'0'; });
 }
+modelBtn.onclick = e => { e.stopPropagation(); modelMenu.classList.toggle('open'); };
+document.addEventListener('click', e => { if(!e.target.closest('#modelMenu') && !e.target.closest('#modelBtn')) modelMenu.classList.remove('open'); });
 
 // ---------- Chat tarixi (localStorage) ----------
 let chats = JSON.parse(localStorage.getItem('myai-chats')||'[]');
@@ -997,7 +988,7 @@ accAcc.onclick = () => {
 };
 
 // ---------- Start ----------
-setMode('gemini');
+setMode('flash');
 if(chats.length){ currentId = chats[chats.length-1].id; } else { newChat(); }
 renderHistory(); renderMessages();
 setTimeout(moveGlow, 60);
