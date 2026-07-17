@@ -7,6 +7,8 @@ import re
 import os
 import time
 import datetime
+import hashlib
+import secrets
 import urllib.request
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -250,6 +252,25 @@ def clean_reply(text, prompt):
     return result or "..."
 
 
+USERS_FILE = ROOT / "data" / "users.json"
+
+
+def load_users():
+    try:
+        return json.loads(USERS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def save_users(u):
+    USERS_FILE.parent.mkdir(exist_ok=True)
+    USERS_FILE.write_text(json.dumps(u, ensure_ascii=False, indent=2))
+
+
+def hash_pw(pw, salt):
+    return hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), 100000).hex()
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         self.send_response(code)
@@ -285,6 +306,30 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def do_POST(self):
+        if self.path == "/api/register":
+            d = self._read_body()
+            name = (d.get("name") or "").strip()
+            email = (d.get("email") or "").strip().lower()
+            pw = d.get("password") or ""
+            if not name or not email or len(pw) < 4:
+                self._send(400, json.dumps({"error": "Ism, email va kamida 4 belgili parol kerak"}, ensure_ascii=False)); return
+            users = load_users()
+            if email in users:
+                self._send(409, json.dumps({"error": "Bu email allaqachon ro'yxatdan o'tgan"}, ensure_ascii=False)); return
+            salt = secrets.token_hex(16)
+            token = secrets.token_hex(24)
+            users[email] = {"name": name, "salt": salt, "hash": hash_pw(pw, salt), "token": token}
+            save_users(users)
+            self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token}, ensure_ascii=False)); return
+        if self.path == "/api/login":
+            d = self._read_body()
+            email = (d.get("email") or "").strip().lower()
+            pw = d.get("password") or ""
+            users = load_users()
+            u = users.get(email)
+            if not u or u["hash"] != hash_pw(pw, u["salt"]):
+                self._send(401, json.dumps({"error": "Email yoki parol xato"}, ensure_ascii=False)); return
+            self._send(200, json.dumps({"ok": True, "name": u["name"], "email": email, "token": u["token"]}, ensure_ascii=False)); return
         if self.path == "/api/generate":
             data = self._read_body()
             prompt = (data.get("prompt") or "").strip().lower()

@@ -126,6 +126,9 @@ tailwind.config = {
   .menu-item.danger{ color:#ff6b81; } .menu-item.danger:hover{ background:rgba(255,91,122,.12); }
   .menu-item svg{ width:16px; height:16px; opacity:.85; flex-shrink:0; }
   .menu-sep{ height:1px; background:rgba(255,255,255,.07); margin:5px 6px; }
+  .auth-inp{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:11px 14px; font-size:14px; color:#e8eaf2; outline:none; transition:border .15s; }
+  .auth-inp:focus{ border-color:rgba(91,140,255,.5); }
+  .auth-inp::placeholder{ color:#73726c; }
   .overlay{ position:fixed; inset:0; z-index:95; background:rgba(3,4,10,.6); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; }
   .overlay.open{ display:flex; animation:vfade .35s ease; }
   .modal-card{ width:min(420px,92vw); border-radius:26px; padding:0; overflow:hidden; transform:scale(.96); transition:transform .35s cubic-bezier(.2,.8,.2,1); }
@@ -209,9 +212,9 @@ tailwind.config = {
     <!-- profile -->
     <div class="px-3 py-3 border-t border-white/5">
       <div id="profileBlock" class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
-        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold text-white text-sm">IT</div>
+        <div id="sbAvatar" class="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold text-white text-sm">IT</div>
         <div class="flex-1 min-w-0">
-          <div class="text-[13.5px] font-semibold truncate">Inomjon Toshmirzayev</div>
+          <div id="sbName" class="text-[13.5px] font-semibold truncate">Inomjon Toshmirzayev</div>
           <div class="text-[11px] text-muted">Bepul reja</div>
         </div>
         <button id="gearBtn" class="text-muted hover:text-ink transition-colors active:scale-90" title="Sozlamalar">
@@ -341,20 +344,20 @@ tailwind.config = {
 <div id="profileModal" class="overlay">
   <div class="modal-card glass-strong">
     <div class="flex items-center justify-between px-5 pt-5 pb-2">
-      <span class="text-[13px] text-muted">toshmirzayevinomjon@gmail.com</span>
+      <span id="pmEmail" class="text-[13px] text-muted">toshmirzayevinomjon@gmail.com</span>
       <button id="pmClose" class="text-muted hover:text-ink active:scale-90 transition"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="flex flex-col items-center px-6 pb-5 pt-3">
       <div class="relative">
-        <div class="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center text-2xl font-bold text-white shadow-2xl">IT</div>
+        <div id="pmAvatar" class="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center text-2xl font-bold text-white shadow-2xl">IT</div>
         <button class="absolute -bottom-1 -right-1 w-8 h-8 rounded-full glass-strong flex items-center justify-center text-muted hover:text-ink transition"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
       </div>
-      <h2 class="text-[22px] font-extrabold mt-4 grad-text">Salom, Inomjon!</h2>
-      <button class="mt-4 w-full border border-white/15 hover:border-indigo-400/50 hover:bg-white/5 rounded-full py-2.5 text-[14px] font-semibold transition active:scale-95">Google hisobingizni boshqaring</button>
+      <h2 id="pmGreeting" class="text-[22px] font-extrabold mt-4 grad-text">Salom, Inomjon!</h2>
+      <button id="pmAuthBtn" class="mt-4 w-full border border-white/15 hover:border-indigo-400/50 hover:bg-white/5 rounded-full py-2.5 text-[14px] font-semibold transition active:scale-95">Kirish / Ro'yxatdan o'tish</button>
       <button id="accAcc" class="mt-2 w-full text-[13px] text-muted hover:text-ink py-2 flex items-center justify-center gap-1 transition">Ko'proq hisoblarni ko'rsatish <span id="accArrow">▾</span></button>
       <div id="accPanel" class="w-full overflow-hidden transition-all duration-300" style="max-height:0">
-        <button class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/5 text-[13.5px] flex items-center gap-2.5"><span class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs">+</span>Boshqa hisob kiritish</button>
-        <button class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/5 text-[13.5px] text-rose-300 flex items-center gap-2.5">🚪 Barcha hisoblardan chiqish</button>
+        <button id="pmAddAcc" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/5 text-[13.5px] flex items-center gap-2.5"><span class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs">+</span>Boshqa hisob kiritish</button>
+        <button id="pmLogout" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/5 text-[13.5px] text-rose-300 flex items-center gap-2.5" style="display:none">🚪 Chiqish</button>
       </div>
       <div class="flex gap-4 mt-4 text-[11.5px] text-muted">
         <span class="hover:text-ink cursor-pointer">Maxfiylik siyosati</span><span>·</span><span class="hover:text-ink cursor-pointer">Xizmat shartlari</span>
@@ -363,6 +366,25 @@ tailwind.config = {
   </div>
 </div>
 
+
+<div id="authModal" class="overlay">
+  <div class="modal-card glass-strong" style="width:min(400px,92vw)">
+    <div class="flex items-center justify-between px-6 pt-6">
+      <h2 id="authTitle" class="text-[20px] font-extrabold grad-text">Kirish</h2>
+      <button id="authClose" class="text-muted hover:text-ink active:scale-90 transition"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="px-6 pb-6 pt-4 flex flex-col gap-3">
+      <input id="authName" placeholder="Ismingiz" class="auth-inp" style="display:none">
+      <input id="authEmail" type="email" placeholder="Email" class="auth-inp">
+      <input id="authPass" type="password" placeholder="Parol" class="auth-inp">
+      <div id="authErr" class="text-rose-400 text-[12.5px] min-h-[16px]"></div>
+      <button id="authSubmit" class="grad-btn text-white font-semibold py-2.5 rounded-xl active:scale-95 hover:brightness-110 transition">Kirish</button>
+      <div class="text-center text-[13px] text-muted mt-1">
+        <span id="authSwitchTxt">Hisobingiz yo'qmi?</span> <span id="authSwitch" class="text-indigo-300 cursor-pointer font-semibold">Ro'yxatdan o'ting</span>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="voiceModal" class="voice-modal">
   <canvas id="vizCanvas"></canvas>
   <div class="voice-status"><div class="st" id="vStatus">Tinglayapman...</div></div>
@@ -986,6 +1008,80 @@ accAcc.onclick = () => {
   accPanel.style.maxHeight = open ? '0' : '140px';
   accArrow.textContent = open ? '▾' : '▴';
 };
+
+// ========== RO'YXATDAN O'TISH / KIRISH ==========
+let AUTH_MODE = 'login';
+const authModal = document.getElementById('authModal');
+function currentUser(){ try{ return JSON.parse(localStorage.getItem('myai-user')); }catch(e){ return null; } }
+
+function updateProfileUI(){
+  const u = currentUser();
+  const name = u ? u.name : 'Mehmon';
+  const email = u ? u.email : 'Kirmagansiz';
+  const initials = (name||'M').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase() || 'M';
+  const set = (id,val,prop)=>{ const el=document.getElementById(id); if(el) el[prop||'textContent']=val; };
+  set('sbName', name); set('sbAvatar', initials);
+  set('pmAvatar', initials); set('pmEmail', email);
+  set('pmGreeting', 'Salom, ' + (name.split(' ')[0]) + '!');
+  const authBtn = document.getElementById('pmAuthBtn');
+  const logout = document.getElementById('pmLogout');
+  if(u){ if(authBtn) authBtn.textContent='Hisobim faol ✓'; if(logout) logout.style.display=''; }
+  else { if(authBtn) authBtn.textContent="Kirish / Ro'yxatdan o'tish"; if(logout) logout.style.display='none'; }
+}
+
+function setAuthMode(mode){
+  AUTH_MODE = mode;
+  const reg = mode==='register';
+  document.getElementById('authName').style.display = reg?'':'none';
+  document.getElementById('authTitle').textContent = reg?"Ro'yxatdan o'tish":'Kirish';
+  document.getElementById('authSubmit').textContent = reg?"Ro'yxatdan o'tish":'Kirish';
+  document.getElementById('authSwitchTxt').textContent = reg?'Hisobingiz bormi?':"Hisobingiz yo'qmi?";
+  document.getElementById('authSwitch').textContent = reg?'Kiring':"Ro'yxatdan o'ting";
+}
+function openAuth(mode){
+  setAuthMode(mode||'login');
+  document.getElementById('authErr').textContent='';
+  document.getElementById('authEmail').value=''; document.getElementById('authPass').value=''; document.getElementById('authName').value='';
+  authModal.classList.add('open');
+  if(typeof profileModal!=='undefined') profileModal.classList.remove('open');
+}
+
+document.getElementById('authSwitch').onclick = ()=> setAuthMode(AUTH_MODE==='login'?'register':'login');
+document.getElementById('authClose').onclick = ()=> authModal.classList.remove('open');
+authModal.onclick = e => { if(e.target===authModal) authModal.classList.remove('open'); };
+
+document.getElementById('authSubmit').onclick = async ()=>{
+  const err = document.getElementById('authErr');
+  const email = document.getElementById('authEmail').value.trim();
+  const pass = document.getElementById('authPass').value;
+  const name = document.getElementById('authName').value.trim();
+  if(!email || !pass){ err.textContent='Email va parol kiriting'; return; }
+  if(AUTH_MODE==='register' && !name){ err.textContent='Ismingizni kiriting'; return; }
+  const url = AUTH_MODE==='register' ? '/api/register' : '/api/login';
+  const body = AUTH_MODE==='register' ? {name,email,password:pass} : {email,password:pass};
+  err.textContent='Kutilmoqda...';
+  try{
+    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    if(d.error){ err.textContent=d.error; return; }
+    localStorage.setItem('myai-user', JSON.stringify({name:d.name,email:d.email,token:d.token}));
+    updateProfileUI();
+    authModal.classList.remove('open');
+    toast('Xush kelibsiz, '+d.name+'! 🎉');
+  }catch(e){ err.textContent="Server bilan aloqa yo'q"; }
+};
+// Enter bilan yuborish
+['authEmail','authPass','authName'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('authSubmit').click(); }); });
+
+// Profil modal tugmalari
+const _pmAuth = document.getElementById('pmAuthBtn');
+if(_pmAuth) _pmAuth.onclick = ()=>{ if(!currentUser()) openAuth('login'); };
+const _pmLogout = document.getElementById('pmLogout');
+if(_pmLogout) _pmLogout.onclick = ()=>{ localStorage.removeItem('myai-user'); updateProfileUI(); if(typeof profileModal!=='undefined') profileModal.classList.remove('open'); toast('Hisobdan chiqdingiz'); };
+const _pmAdd = document.getElementById('pmAddAcc');
+if(_pmAdd) _pmAdd.onclick = ()=> openAuth('register');
+
+updateProfileUI();
 
 // ---------- Start ----------
 setMode('flash');
