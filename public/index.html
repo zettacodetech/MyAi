@@ -263,6 +263,7 @@ tailwind.config = {
               <div class="pop-item" data-act="image-gen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>Rasm yaratish</div>
               <div class="pop-item" data-act="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Musiqa yaratish</div>
               <div class="pop-item" data-act="ocoya"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Ijtimoiy tarmoqqa post</div>
+              <div class="pop-item" data-act="fireflies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Yig'ilishlarim (Fireflies)</div>
               <div class="pop-sep"></div>
               <div class="pop-item" id="moreBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Boshqa vositalar<svg class="ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M9 18l6-6-6-6"/></svg>
                 <div id="subMenu" class="pop sub glass-strong">
@@ -687,6 +688,23 @@ function handleAct(a){
     fetch('/api/ocoya',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caption:cap})})
       .then(r=>r.json()).then(d=>{ if(d.error) toast('Ocoya xato: '+d.error); else { toast('🚀 Ocoya\'ga yuborildi! ('+(d.workspace||'')+' — qoralama)'); input.value=''; autosize(); } })
       .catch(()=>toast('Aloqa xatosi'));
+    return;
+  }
+  if(a === 'fireflies'){
+    toast("Yig'ilishlar yuklanmoqda...");
+    fetch('/api/fireflies',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(r=>r.json()).then(d=>{
+        if(d.error){ toast('Fireflies xato: '+d.error); return; }
+        const ms = d.meetings||[];
+        if(!ms.length){ toast("Hali yig'ilish yo'q. Fireflies bilan Zoom/Meet suhbatini yozing."); return; }
+        const empt = document.getElementById('empty'); if(empt) empt.remove();
+        if(!currentChat()) newChat();
+        const row = aiRow('📝 Fireflies');
+        let txt = "Sizning oxirgi yig'ilishlaringiz:\n\n";
+        ms.forEach((m,i)=>{ txt += (i+1)+'. '+m.title+'\n'+(m.overview?('   '+m.overview.slice(0,220)+'\n'):'')+'\n'; });
+        row.body.textContent = txt;
+        currentChat().messages.push({role:'assistant', content:txt, mode:'flash'}); saveChats(); scrollDown();
+      }).catch(()=>toast('Aloqa xatosi'));
     return;
   }
   const names = { 'image-gen':'Rasm yaratish', music:'Musiqa yaratish' };

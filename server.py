@@ -65,6 +65,7 @@ ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KE
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or ENV.get("GOOGLE_CLIENT_ID", "")
 OCOYA_KEY = os.environ.get("OCOYA_API_KEY") or ENV.get("OCOYA_API_KEY", "")
 OCOYA_BASE = "https://www.app.ocoya.com/api/_public/v1"
+FIREFLIES_KEY = os.environ.get("FIREFLIES_API_KEY") or ENV.get("FIREFLIES_API_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -305,6 +306,26 @@ def ocoya_post(caption, scheduled_at=None):
         return {"error": str(e)}
 
 
+def fireflies_meetings(limit=10):
+    if not FIREFLIES_KEY:
+        return {"error": "Fireflies kaliti yo'q"}
+    q = "{ transcripts(limit: %d) { title date summary { overview } } }" % limit
+    try:
+        req = urllib.request.Request("https://api.fireflies.ai/graphql",
+            data=json.dumps({"query": q}).encode("utf-8"),
+            headers={"Authorization": "Bearer " + FIREFLIES_KEY, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            d = json.loads(r.read())
+        ts = (d.get("data") or {}).get("transcripts") or []
+        out = []
+        for t in ts:
+            summ = (t.get("summary") or {}).get("overview") or ""
+            out.append({"title": t.get("title", "Yig'ilish"), "date": t.get("date"), "overview": summ})
+        return {"meetings": out}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def decode_jwt(token):
     """Google ID token (JWT) payloadini ochadi (imzo tekshirilmaydi, demo uchun)."""
     try:
@@ -393,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
                 users[email] = {"name": name, "google": True, "token": token, "picture": info.get("picture", "")}
             save_users(users)
             self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token, "picture": info.get("picture", "")}, ensure_ascii=False)); return
+        if self.path == "/api/fireflies":
+            self._send(200, json.dumps(fireflies_meetings(10), ensure_ascii=False)); return
         if self.path == "/api/ocoya":
             d = self._read_body()
             caption = (d.get("caption") or d.get("prompt") or "").strip()
