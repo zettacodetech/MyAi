@@ -714,7 +714,7 @@ const vVoice = document.getElementById('vVoice');
 const VM = {
   active:false, state:'idle', muted:false,
   ac:null, analyser:null, data:null, stream:null, raf:null, recog:null,
-  voices:[], voiceIdx:0, resizeH:null,
+  voices:[], voiceIdx:0, userVoice:null, resizeH:null,
 
   async start(){
     voiceModal.classList.add('open');
@@ -776,12 +776,20 @@ const VM = {
     }catch(e){ this.speak("Aloqa xatosi yuz berdi."); }
   },
 
+  pickVoice(){
+    if(this.userVoice) return this.userVoice;
+    const vs = speechSynthesis.getVoices();
+    const pref = ['uz','tr','az','kk','ru'];   // o'zbek -> turk (eng yaqin) -> ozar -> qozoq -> rus
+    for(const code of pref){ const v = vs.find(x=> (x.lang||'').toLowerCase().startsWith(code)); if(v) return v; }
+    return vs[0] || null;
+  },
   speak(text){
     this.setState('speaking');
     vTranscript.textContent = text.slice(0,220);
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'uz-UZ'; u.rate = 1; u.pitch = 1;
-    if(this.voices[this.voiceIdx]) u.voice = this.voices[this.voiceIdx];
+    const v = this.pickVoice();
+    if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'tr-TR'; }
+    u.rate = 0.97; u.pitch = 1.02;
     u.onend = () => { if(this.active){ vTranscript.textContent=''; this.listen(); } };
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
@@ -835,7 +843,11 @@ const VM = {
     else this.listen();
   },
   cycleVoice(){
-    if(this.voices.length){ this.voiceIdx = (this.voiceIdx+1)%this.voices.length; toast("Ovoz: " + (this.voices[this.voiceIdx].name||'').slice(0,26)); }
+    const vs = speechSynthesis.getVoices();
+    if(!vs.length){ toast("Brauzeringizda ovozlar yo'q"); return; }
+    this.voiceIdx = (this.voiceIdx+1)%vs.length;
+    this.userVoice = vs[this.voiceIdx];
+    toast("Ovoz: " + (this.userVoice.name||'').slice(0,24) + " (" + this.userVoice.lang + ")");
   },
   end(){
     this.active = false;
@@ -914,7 +926,7 @@ function chatAction(a){
   else if(a==='pdf'){ exportChatPDF(c); }
   else if(a==='notebook'){ const txt = c.messages.map(m=>(m.role==='user'?'Siz: ':'MyAI: ')+m.content).join('\n\n'); const prev=localStorage.getItem('myai-ws-notebook')||''; localStorage.setItem('myai-ws-notebook', prev+(prev?'\n\n':'')+'# '+c.title+'\n'+txt); toast('📓 Daftarga kiritildi'); }
   else if(a==='files'){ toast('📂 Bu chatda fayl yo\'q'); }
-  else if(a==='docs'){ toast('📄 Docs eksport — tez orada'); }
+  else if(a==='docs'){ const html='<html><head><meta charset="utf-8"></head><body><h2>'+c.title+'</h2>'+c.messages.map(m=>'<p><b>'+(m.role==='user'?'Siz':'MyAI')+':</b> '+(m.content||'').replace(/</g,'&lt;')+'</p>').join('')+'</body></html>'; const blob=new Blob([html],{type:'application/msword'}); const a2=document.createElement('a'); a2.href=URL.createObjectURL(blob); a2.download=(c.title||'chat')+'.doc'; a2.click(); toast('📄 .doc hujjat yuklab olindi'); }
 }
 function exportChatPDF(c){
   const rows = c.messages.map(m=>'<p style="margin:12px 0"><b>'+(m.role==='user'?'Siz':'MyAI')+':</b> '+(m.content||'').replace(/</g,'&lt;')+'</p>').join('');
@@ -945,9 +957,25 @@ gearMenu.querySelectorAll('.menu-item').forEach(it=>{
   if(it.id==='gearPI'){
     it.onclick = () => { let on = localStorage.getItem('myai-pi')!=='1'; localStorage.setItem('myai-pi', on?'1':'0'); if(typeof renderPI==='function') renderPI(); toast(on?'🧠 Personal Intelligence yoqildi':'Personal Intelligence o\'chirildi'); };
   } else {
-    it.onclick = () => { gearMenu.classList.remove('open'); toast(it.textContent.trim().replace('›','') + ' — tez orada'); };
+    it.onclick = () => { gearMenu.classList.remove('open'); gearAction(it.textContent.trim()); };
   }
 });
+
+// Mavzu (rang) + gear amallar
+const THEME_STYLE = document.createElement('style'); document.head.appendChild(THEME_STYLE);
+const THEMES = [['#5b8cff','#a06bff'],['#22c9a0','#39d0ff'],['#ff6ba6','#a06bff'],['#ffa94d','#ff6b6b']];
+let themeIdx = parseInt(localStorage.getItem('myai-theme-idx')||'0');
+function applyTheme(i){ const t=THEMES[i%THEMES.length]; THEME_STYLE.textContent='.grad-btn{background:linear-gradient(120deg,'+t[0]+','+t[1]+')!important}.grad-text{background:linear-gradient(120deg,'+t[0]+','+t[1]+',#39d0ff)!important;-webkit-background-clip:text;background-clip:text}.seg-glow{background:linear-gradient(120deg,'+t[0]+','+t[1]+')!important}'; localStorage.setItem('myai-theme-idx', i%THEMES.length); }
+applyTheme(themeIdx);
+function gearAction(label){
+  if(label.includes('Faollik')){ const n=chats.length, m=chats.reduce((s,c)=>s+c.messages.length,0); toast('🕒 Faollik: '+n+' ta chat, '+m+' ta xabar'); }
+  else if(label.includes('limit')){ const m=chats.reduce((s,c)=>s+c.messages.length,0); toast('📊 Siz '+m+' ta xabar yozgansiz · Gemini bepul, cheklovsiz'); }
+  else if(label.includes('Mavzu')){ themeIdx=(themeIdx+1)%THEMES.length; applyTheme(themeIdx); toast('🎨 Rang mavzusi o\'zgardi'); }
+  else if(label.includes('Fikr')){ location.href='mailto:toshmirzayevinomjon@gmail.com?subject=MyAI%20fikr-mulohaza'; }
+  else if(label.includes('NotebookLM')){ if(typeof openWorkspace==='function') openWorkspace('notebook'); }
+  else if(label.includes('havola')){ toast('🌐 Sizda hali ommaviy havola yo\'q'); }
+  else toast(label.replace('›','').trim()+' — tez orada');
+}
 
 // Profil modal
 document.getElementById('profileBlock').onclick = e => {
