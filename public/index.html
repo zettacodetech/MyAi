@@ -417,10 +417,10 @@ const IC = {
 const MODES = [
   { key:'myai',       label:'MyAI \u2726',  short:'MyAI',   icon:IC.spark,  model:'myai', provider:'myai' },
   { key:'fast',       label:'Tez javob \u26a1', short:'Tez',   icon:IC.bolt,   model:'myai', provider:'myai', fast:true },
+  { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'myai', provider:'myai', deep:true },
   { key:'flash-lite', label:'Flash-Lite', short:'Lite',   icon:IC.bolt,   model:'gemini-flash-lite-latest' },
   { key:'flash',      label:'Flash',      short:'Flash',  icon:IC.spark,  model:'gemini-flash-latest' },
   { key:'pro',        label:'Pro',        short:'Pro',    icon:IC.code,   model:'gemini-flash-latest', pro:true },
-  { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'myai', provider:'myai', deep:true },
   { key:'llama',      label:'Llama 3.3', short:'Llama', icon:IC.spark, model:'meta-llama/Llama-3.3-70B-Instruct', provider:'hf' },
   { key:'deepseek',   label:'DeepSeek', short:'DeepSeek', icon:IC.code, model:'deepseek-ai/DeepSeek-V3', provider:'hf' },
   { key:'gpt4o',      label:'GPT-4o', short:'GPT-4o', icon:IC.spark, model:'openai/gpt-4o', provider:'openrouter' },
@@ -438,7 +438,10 @@ const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
 const MODEL_DESC = { 'myai':'Barcha modellar birga: Gemini+Groq+Llama+Bepul AI \u2014 eng yaxshi javob', 'fast':'Bitta tez model (Groq) \u2014 darhol javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Barcha AI chuqur birga fikrlaydi (ansambl)', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
-MODES.forEach(m=>{
+function _menuLabel(txt){ const d=document.createElement('div'); d.className='px-3 pt-2 pb-1 text-[10.5px] font-bold uppercase tracking-wide text-muted'; d.textContent=txt; modelMenu.appendChild(d); }
+MODES.forEach((m,idx)=>{
+  if(idx===0) _menuLabel('✦ MyAI rejimlari');
+  if(idx===3) _menuLabel('Alohida modellar');
   const it = document.createElement('div');
   it.className = 'pop-item';
   it.dataset.key = m.key;
@@ -482,6 +485,7 @@ async function loadChatsFromServer(){
       currentId = chats.length ? chats[chats.length-1].id : null;
       if(typeof renderHistory==='function') renderHistory();
       if(typeof renderMessages==='function') renderMessages();
+      if(typeof toast==='function') toast('☁ Suhbatlaringiz bulutdan yuklandi');
     }
   }catch(e){}
 }
