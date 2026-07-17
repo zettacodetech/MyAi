@@ -68,6 +68,7 @@ OCOYA_BASE = "https://www.app.ocoya.com/api/_public/v1"
 FIREFLIES_KEY = os.environ.get("FIREFLIES_API_KEY") or ENV.get("FIREFLIES_API_KEY", "")
 MEDIASTACK_KEY = os.environ.get("MEDIASTACK_API_KEY") or ENV.get("MEDIASTACK_API_KEY", "")
 AISHA_KEY = os.environ.get("AISHA_API_KEY") or ENV.get("AISHA_API_KEY", "")
+HF_KEY = os.environ.get("HF_API_KEY") or ENV.get("HF_API_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -484,6 +485,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(result, ensure_ascii=False))
         elif self.path == "/api/gemini":
             self.stream_gemini()
+        elif self.path == "/api/hf":
+            self.stream_hf()
         elif self.path == "/api/research":
             self.stream_research()
         elif self.path == "/api/claude":
@@ -705,6 +708,59 @@ class Handler(BaseHTTPRequestHandler):
                     sse(f"[{i+1}] {c['link']}\n")
         try:
             self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_hf(self):
+        """Hugging Face router (Llama, DeepSeek...) orqali streaming."""
+        data = self._read_body()
+        prompt = (data.get("prompt") or "").strip()
+        model = data.get("model") or "meta-llama/Llama-3.3-70B-Instruct"
+        if not re.match(r"^[A-Za-z0-9._/:-]+$", model):
+            model = "meta-llama/Llama-3.3-70B-Instruct"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            self.wfile.write(f"data: {json.dumps({'c': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        if not HF_KEY:
+            sse("HF kaliti yo'q.")
+        else:
+            body = {"model": model, "stream": True, "max_tokens": 1024,
+                    "messages": [{"role": "system", "content": load_system_prompt()},
+                                 {"role": "user", "content": prompt}]}
+            req = urllib.request.Request("https://router.huggingface.co/v1/chat/completions",
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Authorization": "Bearer " + HF_KEY, "Content-Type": "application/json",
+                         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) MyAI/1.0"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    for raw in resp:
+                        raw = raw.strip()
+                        if not raw or not raw.startswith(b"data:"):
+                            continue
+                        chunk = raw[5:].strip()
+                        if chunk == b"[DONE]":
+                            break
+                        try:
+                            delta = json.loads(chunk)["choices"][0].get("delta", {})
+                            if delta.get("content"):
+                                sse(delta["content"])
+                        except Exception:
+                            continue
+            except urllib.error.HTTPError as e:
+                msg = e.read().decode("utf-8", "ignore")[:150]
+                sse(f"[HF xatosi {e.code}: {msg}]")
+            except Exception as e:
+                sse(f"[HF ulanish xatosi: {e}]")
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
