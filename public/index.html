@@ -781,7 +781,7 @@ const vVoice = document.getElementById('vVoice');
 const VM = {
   active:false, state:'idle', muted:false,
   ac:null, analyser:null, data:null, stream:null, raf:null, recog:null,
-  voices:[], voiceIdx:0, userVoice:null, resizeH:null,
+  voices:[], voiceIdx:0, userVoice:null, ttsAudio:null, resizeH:null,
 
   async start(){
     voiceModal.classList.add('open');
@@ -850,9 +850,23 @@ const VM = {
     for(const code of pref){ const v = vs.find(x=> (x.lang||'').toLowerCase().startsWith(code)); if(v) return v; }
     return vs[0] || null;
   },
-  speak(text){
+  async speak(text){
     this.setState('speaking');
     vTranscript.textContent = text.slice(0,220);
+    // Aisha o'zbek ovozi (asosiy)
+    try{
+      const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,900)})});
+      const d = await r.json();
+      if(d.audio){
+        const audio = new Audio(d.audio);
+        this.ttsAudio = audio;
+        audio.onended = () => { this.ttsAudio=null; if(this.active){ vTranscript.textContent=''; this.listen(); } };
+        audio.onerror = () => { this.ttsAudio=null; if(this.active) this.listen(); };
+        await audio.play();
+        return;
+      }
+    }catch(e){}
+    // Zaxira: brauzer ovozi (turk fonetikasi)
     const u = new SpeechSynthesisUtterance(text);
     const v = this.pickVoice();
     if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'tr-TR'; }
@@ -921,6 +935,7 @@ const VM = {
     voiceModal.classList.remove('open');
     try{ this.recog && this.recog.stop(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
+    try{ if(this.ttsAudio){ this.ttsAudio.pause(); this.ttsAudio=null; } }catch(e){}
     try{ this.stream && this.stream.getTracks().forEach(x=>x.stop()); }catch(e){}
     try{ this.ac && this.ac.close(); }catch(e){}
     if(this.resizeH) window.removeEventListener('resize', this.resizeH);
@@ -932,7 +947,7 @@ document.getElementById('voiceBtn').onclick = () => VM.start();
 vEnd.onclick = () => VM.end();
 vMute.onclick = () => VM.toggleMute();
 vVoice.onclick = () => VM.cycleVoice();
-vizCanvas.onclick = () => { if(VM.state==='speaking'){ speechSynthesis.cancel(); VM.listen(); } };
+vizCanvas.onclick = () => { if(VM.state==='speaking'){ speechSynthesis.cancel(); if(VM.ttsAudio){ try{VM.ttsAudio.pause();}catch(e){} VM.ttsAudio=null; } VM.listen(); } };
 
 // ========== SIDEBAR QIDIRUV + KONTEKST MENYU + MODALLAR ==========
 window.__search = '';

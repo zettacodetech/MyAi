@@ -67,6 +67,7 @@ OCOYA_KEY = os.environ.get("OCOYA_API_KEY") or ENV.get("OCOYA_API_KEY", "")
 OCOYA_BASE = "https://www.app.ocoya.com/api/_public/v1"
 FIREFLIES_KEY = os.environ.get("FIREFLIES_API_KEY") or ENV.get("FIREFLIES_API_KEY", "")
 MEDIASTACK_KEY = os.environ.get("MEDIASTACK_API_KEY") or ENV.get("MEDIASTACK_API_KEY", "")
+AISHA_KEY = os.environ.get("AISHA_API_KEY") or ENV.get("AISHA_API_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -307,6 +308,20 @@ def ocoya_post(caption, scheduled_at=None):
         return {"error": str(e)}
 
 
+def aisha_tts(text):
+    if not AISHA_KEY:
+        return {"error": "Aisha kaliti yo'q"}
+    try:
+        req = urllib.request.Request("https://back.aisha.group/api/v1/tts/post/",
+            data=json.dumps({"transcript": text[:900]}).encode("utf-8"),
+            headers={"X-Api-Key": AISHA_KEY, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=45) as r:
+            d = json.loads(r.read())
+        return {"audio": d.get("audio_path")}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def mediastack_news(limit=8):
     if not MEDIASTACK_KEY:
         return {"error": "Mediastack kaliti yo'q"}
@@ -433,6 +448,12 @@ class Handler(BaseHTTPRequestHandler):
                 users[email] = {"name": name, "google": True, "token": token, "picture": info.get("picture", "")}
             save_users(users)
             self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token, "picture": info.get("picture", "")}, ensure_ascii=False)); return
+        if self.path == "/api/tts":
+            d = self._read_body()
+            txt = (d.get("text") or "").strip()
+            if not txt:
+                self._send(400, json.dumps({"error": "matn bo'sh"}, ensure_ascii=False)); return
+            self._send(200, json.dumps(aisha_tts(txt), ensure_ascii=False)); return
         if self.path == "/api/worldnews":
             self._send(200, json.dumps(mediastack_news(8), ensure_ascii=False)); return
         if self.path == "/api/fireflies":
