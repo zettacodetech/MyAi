@@ -315,6 +315,8 @@ def mediastack_news(limit=8):
             "access_key": MEDIASTACK_KEY, "limit": limit, "languages": "en,ru", "sort": "published_desc"})
         with urllib.request.urlopen(url, timeout=20) as r:
             d = json.loads(r.read())
+        if isinstance(d.get("error"), dict):
+            return {"error": d["error"].get("message", "Mediastack xatosi")[:120]}
         items = [{"title": a.get("title"), "source": a.get("source"),
                   "url": a.get("url"), "date": (a.get("published_at") or "")[:10]}
                  for a in (d.get("data") or []) if a.get("title")]
