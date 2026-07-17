@@ -63,7 +63,9 @@ ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KEY", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or ENV.get("GOOGLE_CLIENT_ID", "")
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
+_gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
+GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
+GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
 GEMINI_MODEL = "gemini-flash-latest"
 if GEMINI_KEY:
     print("Gemini rejimi yoqilgan")
@@ -487,13 +489,17 @@ class Handler(BaseHTTPRequestHandler):
                 "systemInstruction": {"parts": [{"text": load_system_prompt()}]},
                 "contents": [{"role": "user", "parts": uparts}],
             }
-            req = urllib.request.Request(
-                url, data=json.dumps(body).encode("utf-8"),
-                headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
-            )
-            last_err = None
+            keys = GEMINI_KEYS or ([GEMINI_KEY] if GEMINI_KEY else [])
+            data_bytes = json.dumps(body).encode("utf-8")
             got = False
-            for attempt in range(4):
+            last_err = None
+            ki = 0
+            retry = 0
+            while ki < len(keys) and not got:
+                req = urllib.request.Request(
+                    url, data=data_bytes,
+                    headers={"Content-Type": "application/json", "x-goog-api-key": keys[ki]},
+                )
                 try:
                     with urllib.request.urlopen(req, timeout=60) as resp:
                         for raw in resp:
@@ -502,8 +508,7 @@ class Handler(BaseHTTPRequestHandler):
                                 continue
                             try:
                                 obj = json.loads(raw[5:].strip())
-                                parts = obj["candidates"][0]["content"]["parts"]
-                                for p in parts:
+                                for p in obj["candidates"][0]["content"]["parts"]:
                                     if p.get("text"):
                                         got = True
                                         sse(p["text"])
@@ -511,22 +516,27 @@ class Handler(BaseHTTPRequestHandler):
                                 continue
                     break  # muvaffaqiyat
                 except urllib.error.HTTPError as e:
-                    body = e.read().decode("utf-8", "ignore")
-                    if e.code in (503, 429, 500) and attempt < 3 and not got:
-                        time.sleep(1.5 * (attempt + 1))  # band - kutib qayta uramiz
-                        continue
+                    body_txt = e.read().decode("utf-8", "ignore")
                     try:
-                        last_err = json.loads(body)["error"]["message"][:200]
+                        last_err = json.loads(body_txt)["error"]["message"][:180]
                     except Exception:
-                        last_err = body[:200]
-                    sse(f"[Gemini xatosi {e.code}: {last_err}]")
-                    break
+                        last_err = body_txt[:180]
+                    if got:
+                        break
+                    if e.code == 429:               # kvota -> keyingi kalit
+                        ki += 1; retry = 0; continue
+                    if e.code in (503, 500) and retry < 2:   # band -> shu kalitni qayta
+                        retry += 1; time.sleep(1.5 * retry); continue
+                    ki += 1; retry = 0; continue    # boshqa xato -> keyingi kalit
                 except Exception as e:
-                    if attempt < 3 and not got:
-                        time.sleep(1.5)
-                        continue
-                    sse(f"[Gemini ulanish xatosi: {e}]")
-                    break
+                    last_err = str(e)
+                    if got:
+                        break
+                    if retry < 2:
+                        retry += 1; time.sleep(1.5); continue
+                    ki += 1; retry = 0; continue
+            if not got and last_err:
+                sse(f"[Gemini band, keyinroq urining: {last_err[:80]}]")
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
