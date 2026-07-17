@@ -63,6 +63,8 @@ ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KEY", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or ENV.get("GOOGLE_CLIENT_ID", "")
+OCOYA_KEY = os.environ.get("OCOYA_API_KEY") or ENV.get("OCOYA_API_KEY", "")
+OCOYA_BASE = "https://www.app.ocoya.com/api/_public/v1"
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -275,6 +277,34 @@ def hash_pw(pw, salt):
     return hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), 100000).hex()
 
 
+def ocoya_req(path, method="GET", body=None):
+    url = OCOYA_BASE + path
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"X-API-Key": OCOYA_KEY}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=25) as r:
+        return json.loads(r.read())
+
+
+def ocoya_post(caption, scheduled_at=None):
+    if not OCOYA_KEY:
+        return {"error": "Ocoya kaliti yo'q"}
+    try:
+        ws = ocoya_req("/workspaces")
+        if not ws:
+            return {"error": "Ocoya workspace topilmadi"}
+        wid = ws[0]["id"]
+        payload = {"caption": caption}
+        if scheduled_at:
+            payload["scheduledAt"] = scheduled_at
+        d = ocoya_req("/post?workspaceId=" + wid, "POST", payload)
+        return {"ok": True, "postGroupId": d.get("postGroupId"), "workspace": ws[0].get("name", "")}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def decode_jwt(token):
     """Google ID token (JWT) payloadini ochadi (imzo tekshirilmaydi, demo uchun)."""
     try:
@@ -363,6 +393,12 @@ class Handler(BaseHTTPRequestHandler):
                 users[email] = {"name": name, "google": True, "token": token, "picture": info.get("picture", "")}
             save_users(users)
             self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token, "picture": info.get("picture", "")}, ensure_ascii=False)); return
+        if self.path == "/api/ocoya":
+            d = self._read_body()
+            caption = (d.get("caption") or d.get("prompt") or "").strip()
+            if not caption:
+                self._send(400, json.dumps({"error": "Matn bo'sh"}, ensure_ascii=False)); return
+            self._send(200, json.dumps(ocoya_post(caption, d.get("scheduledAt")), ensure_ascii=False)); return
         if self.path == "/api/generate":
             data = self._read_body()
             prompt = (data.get("prompt") or "").strip().lower()
