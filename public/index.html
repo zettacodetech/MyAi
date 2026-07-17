@@ -52,6 +52,8 @@ tailwind.config = {
   .glass-strong{ background:rgba(18,20,36,0.55); backdrop-filter:blur(28px) saturate(150%); -webkit-backdrop-filter:blur(28px); border:1px solid rgba(255,255,255,0.09); }
   /* Gradient text */
   .grad-text{ background:linear-gradient(120deg,#7aa2ff 0%,#a06bff 45%,#39d0ff 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .greeting{ background:linear-gradient(180deg,#ffffff 0%,#c2c6d6 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .big-m{ font-size:88px; line-height:1; font-weight:800; }
   .grad-btn{ background:linear-gradient(120deg,#5b8cff 0%,#a06bff 100%); }
   /* Scrollbar */
   ::-webkit-scrollbar{ width:8px; height:8px; }
@@ -163,7 +165,6 @@ tailwind.config = {
   <aside id="sidebar" class="glass-strong w-[280px] shrink-0 flex flex-col transition-transform duration-300">
     <!-- logo -->
     <div class="flex items-center gap-3 px-5 pt-5 pb-4">
-      <div class="w-9 h-9 rounded-xl grad-btn flex items-center justify-center font-extrabold text-white shadow-lg shadow-indigo-900/40">M</div>
       <div>
         <div class="font-extrabold text-[17px] tracking-tight">MyAI</div>
         <div class="text-[11px] text-muted -mt-0.5">Sun'iy intellekt</div>
@@ -234,9 +235,11 @@ tailwind.config = {
     <div id="scroll" class="flex-1 overflow-y-auto">
       <div id="chat" class="max-w-[760px] mx-auto px-5 py-6 w-full">
         <div id="empty" class="min-h-[62vh] flex flex-col items-center justify-center text-center fu">
-          <div class="w-16 h-16 rounded-2xl grad-btn flex items-center justify-center text-3xl font-extrabold text-white shadow-2xl shadow-indigo-900/50 mb-7 animate-glowPulse">M</div>
-          <h1 class="text-[34px] md:text-[42px] font-extrabold leading-tight tracking-tight grad-text max-w-[560px]">Tayyor bo'lsangiz,<br>men ham tayyorman</h1>
-          <p class="text-muted mt-4 text-[15px] max-w-[420px]">Savol bering, kod yozdiring yoki suhbatlashing. Pastda modelni tanlang.</p>
+          <div class="relative flex items-center justify-center mb-7">
+            <div class="absolute w-44 h-44 rounded-full animate-glowPulse" style="background:radial-gradient(circle, rgba(120,130,255,.55), rgba(160,107,255,.28) 42%, transparent 70%); filter:blur(30px)"></div>
+            <div class="relative big-m grad-text">M</div>
+          </div>
+          <h1 class="text-[28px] md:text-[38px] font-extrabold leading-snug tracking-tight greeting max-w-[600px]">Salom, Inomjon! Bugun nima ustida ishlaymiz?</h1>
         </div>
       </div>
     </div>
@@ -457,9 +460,11 @@ function renderMessages(){
     const e = document.createElement('div');
     e.id='empty';
     e.className='min-h-[62vh] flex flex-col items-center justify-center text-center fu';
-    e.innerHTML = `<div class="w-16 h-16 rounded-2xl grad-btn flex items-center justify-center text-3xl font-extrabold text-white shadow-2xl shadow-indigo-900/50 mb-7 animate-glowPulse">M</div>
-      <h1 class="text-[34px] md:text-[42px] font-extrabold leading-tight tracking-tight grad-text max-w-[560px]">Tayyor bo'lsangiz,<br>men ham tayyorman</h1>
-      <p class="text-muted mt-4 text-[15px] max-w-[420px]">Savol bering, kod yozdiring yoki suhbatlashing. Pastda modelni tanlang.</p>`;
+    e.innerHTML = `<div class="relative flex items-center justify-center mb-7">
+        <div class="absolute w-44 h-44 rounded-full animate-glowPulse" style="background:radial-gradient(circle, rgba(120,130,255,.55), rgba(160,107,255,.28) 42%, transparent 70%); filter:blur(30px)"></div>
+        <div class="relative big-m grad-text">M</div>
+      </div>
+      <h1 class="text-[28px] md:text-[38px] font-extrabold leading-snug tracking-tight greeting max-w-[600px]">Salom, Inomjon! Bugun nima ustida ishlaymiz?</h1>`;
     chat.appendChild(e);
     return;
   }
