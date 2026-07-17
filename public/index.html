@@ -580,7 +580,8 @@ async function ask(){
   else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
     const _url = useResearch ? '/api/research' : (m.provider==='myai' ? '/api/myai' : m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
-    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model };
+    const _hist = (c.messages||[]).slice(0,-1).slice(-6).map(x=>({role:x.role, content:x.content}));
+    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist };
     if(!useResearch && !m.provider && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},

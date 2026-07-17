@@ -373,14 +373,19 @@ def decode_jwt(token):
         return None
 
 
-def _gemini_gen(keys, prompt):
+def _gemini_gen(keys, prompt, history=None):
     """Barcha Gemini kalitlarni sinaydi (429/kvota -> keyingi kalit)."""
     if isinstance(keys, str):
         keys = [keys]
     url = ("https://generativelanguage.googleapis.com/v1beta/models/"
            "gemini-flash-latest:streamGenerateContent?alt=sse")
+    contents = []
+    for h in (history or []):
+        role = "model" if h.get("role") == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": h.get("content", "")}]})
+    contents.append({"role": "user", "parts": [{"text": prompt}]})
     body = {"systemInstruction": {"parts": [{"text": load_system_prompt()}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+            "contents": contents}
     last_err = None
     for key in keys:
         try:
@@ -409,10 +414,13 @@ def _gemini_gen(keys, prompt):
         raise last_err
 
 
-def _openai_gen(url, key, model, prompt, extra=None):
-    body = {"model": model, "stream": True, "max_tokens": 1024,
-            "messages": [{"role": "system", "content": load_system_prompt()},
-                         {"role": "user", "content": prompt}]}
+def _openai_gen(url, key, model, prompt, extra=None, history=None):
+    msgs = [{"role": "system", "content": load_system_prompt()}]
+    for h in (history or []):
+        role = "assistant" if h.get("role") == "assistant" else "user"
+        msgs.append({"role": role, "content": h.get("content", "")})
+    msgs.append({"role": "user", "content": prompt})
+    body = {"model": model, "stream": True, "max_tokens": 1024, "messages": msgs}
     headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json",
                "User-Agent": "Mozilla/5.0 MyAI/1.0"}
     if extra:
@@ -447,20 +455,20 @@ def _is_junk(text):
     return False
 
 
-def _collect(kind, spec, prompt):
+def _collect(kind, spec, prompt, history=None):
     """Bitta modeldan to'liq javob yig'adi (parallel uchun). Axlat bo'lsa '' qaytaradi."""
     try:
         if kind == "gemini":
-            out = "".join(_gemini_gen(spec, prompt))
+            out = "".join(_gemini_gen(spec, prompt, history))
             return "" if _is_junk(out) else out
         if kind == "hf":
             out = "".join(_openai_gen("https://router.huggingface.co/v1/chat/completions",
-                                      HF_KEY, spec, prompt))
+                                      HF_KEY, spec, prompt, None, history))
             return "" if _is_junk(out) else out
         if kind == "or":
             out = "".join(_openai_gen("https://openrouter.ai/api/v1/chat/completions",
                                       OPENROUTER_KEY, spec, prompt,
-                                      {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}))
+                                      {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}, history))
             return "" if _is_junk(out) else out
     except Exception:
         return ""
@@ -666,6 +674,13 @@ class Handler(BaseHTTPRequestHandler):
         """Google Gemini (bepul) orqali streaming javob."""
         data = self._read_body()
         prompt = (data.get("prompt") or "").strip()
+        history = data.get("history") or []
+        # xavfsizlik: faqat oxirgi 6 xabar, matn bo'lsa
+        clean_hist = []
+        for h in history[-6:]:
+            if isinstance(h, dict) and h.get("content"):
+                clean_hist.append({"role": h.get("role", "user"), "content": str(h["content"])[:2000]})
+        history = clean_hist
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -815,6 +830,11 @@ class Handler(BaseHTTPRequestHandler):
         """Birlashtirilgan MyAI: bir necha AI birga fikrlab, eng yaxshi yagona javob."""
         data = self._read_body()
         prompt = (data.get("prompt") or "").strip()
+        _raw_hist = data.get("history") or []
+        history = []
+        for h in _raw_hist[-6:]:
+            if isinstance(h, dict) and h.get("content"):
+                history.append({"role": h.get("role", "user"), "content": str(h["content"])[:2000]})
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -842,34 +862,39 @@ class Handler(BaseHTTPRequestHandler):
             tasks.append(("gemini", GEMINI_KEYS))
         if OPENROUTER_KEY:
             tasks.append(("or", "openrouter/free"))
-        if HF_KEY and len(tasks) < 2:
+        if HF_KEY:
             tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
 
-        answers = []
+        answers = []  # (kind, text) juftliklari
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-                futs = [ex.submit(_collect, k, s, q) for k, s in tasks]
-                for f in futs:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+                futs = [(k, ex.submit(_collect, k, s, q, history)) for k, s in tasks]
+                for kind, f in futs:
                     a = f.result()
                     if a and a.strip():
-                        answers.append(a.strip())
+                        answers.append((kind, a.strip()))
         except Exception as e:
             import sys, traceback
             print("[myai parallel xato]", e, file=sys.stderr); traceback.print_exc()
         import sys as _s
-        print(f"[myai] {len(answers)} ta javob keldi (tasks={[t[0] for t in tasks]})", file=_s.stderr)
+        print(f"[myai] {len(answers)} javob: {[k for k,_ in answers]}", file=_s.stderr)
+        # Gemini eng sifatli - fallback uchun ajratib olamiz
+        gem = next((t for k, t in answers if k == "gemini"), None)
+        best_raw = gem or (max((t for _, t in answers), key=len) if answers else None)
 
         # 3. Sintez: javoblarni birlashtirib eng yaxshi yagona javob
         try:
             if not answers:
                 sse("Hozir barcha modellar band. Bir ozdan keyin urining.")
             elif len(answers) == 1:
-                sse(answers[0])
+                sse(answers[0][1])
             else:
-                synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n"
-                         f"=== Javob 1 ===\n{answers[0][:2500]}\n\n=== Javob 2 ===\n{answers[1][:2500]}\n\n"
-                         "Shu javoblardagi eng yaxshi fikrlarni birlashtirib, aniq, to'liq va foydali "
-                         "YAGONA javob yoz. Takrorlama, eng muhimini qoldir. O'zbek tilida.")
+                texts = [t for _, t in answers]
+                blocks = "\n\n".join(f"=== Javob {i+1} ===\n{t[:2500]}" for i, t in enumerate(texts))
+                synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n{blocks}\n\n"
+                         "Shu javoblardagi eng to'g'ri va foydali fikrlarni birlashtirib, aniq, to'liq va "
+                         "ravon YAGONA javob yoz. Takrorlama, xato yoki tushunarsiz qismlarni tashla. "
+                         "Faqat ravon o'zbek tilida yoz.")
                 streamed = False
                 if GEMINI_KEYS:
                     try:
@@ -879,12 +904,13 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         streamed = False
                 if not streamed:
-                    sse(max(answers, key=len))  # sintez bo'lmasa - eng uzun javob
+                    # Sintez bo'lmasa: Gemini javobini afzal ko'ramiz (eng sifatli)
+                    sse(best_raw or texts[0])
         except Exception as e:
             import sys, traceback
             print("[myai sintez xato]", e, file=sys.stderr); traceback.print_exc()
-            if answers:
-                sse(max(answers, key=len))
+            if best_raw:
+                sse(best_raw)
             else:
                 sse("Kechirasiz, hozir javob berolmadim. Qayta urining.")
         try:
