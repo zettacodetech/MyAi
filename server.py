@@ -284,6 +284,46 @@ def hash_pw(pw, salt):
     return hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), 100000).hex()
 
 
+CHATS_DIR = ROOT / "data" / "chats"
+
+
+def user_by_token(token):
+    """Token bo'yicha foydalanuvchi emailini topadi."""
+    if not token:
+        return None
+    for email, u in load_users().items():
+        if u.get("token") == token:
+            return email
+    return None
+
+
+def _chat_file(email):
+    import re as _re
+    safe = _re.sub(r"[^a-zA-Z0-9_.@-]", "_", email)
+    return CHATS_DIR / (safe + ".json")
+
+
+def load_chats(email):
+    try:
+        return json.loads(_chat_file(email).read_text())
+    except Exception:
+        return []
+
+
+def save_chats_srv(email, chats):
+    CHATS_DIR.mkdir(parents=True, exist_ok=True)
+    # xavfsizlik: hajmni cheklaymiz (50 chat, har biri 400 xabar)
+    trimmed = []
+    for c in (chats or [])[:50]:
+        if isinstance(c, dict):
+            c = dict(c)
+            if isinstance(c.get("messages"), list):
+                c["messages"] = c["messages"][-400:]
+            trimmed.append(c)
+    _chat_file(email).write_text(json.dumps(trimmed, ensure_ascii=False))
+    return trimmed
+
+
 def ocoya_req(path, method="GET", body=None):
     url = OCOYA_BASE + path
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -545,6 +585,15 @@ class Handler(BaseHTTPRequestHandler):
             if not u or u["hash"] != hash_pw(pw, u["salt"]):
                 self._send(401, json.dumps({"error": "Email yoki parol xato"}, ensure_ascii=False)); return
             self._send(200, json.dumps({"ok": True, "name": u["name"], "email": email, "token": u["token"]}, ensure_ascii=False)); return
+        if self.path == "/api/chats":
+            d = self._read_body()
+            email = user_by_token(d.get("token"))
+            if not email:
+                self._send(401, json.dumps({"error": "Avval tizimga kiring"}, ensure_ascii=False)); return
+            if "chats" in d and isinstance(d["chats"], list):
+                saved = save_chats_srv(email, d["chats"])
+                self._send(200, json.dumps({"ok": True, "count": len(saved)}, ensure_ascii=False)); return
+            self._send(200, json.dumps({"chats": load_chats(email)}, ensure_ascii=False)); return
         if self.path == "/api/google":
             d = self._read_body()
             info = decode_jwt(d.get("credential") or "")

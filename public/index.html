@@ -460,7 +460,31 @@ document.addEventListener('click', e => { if(!e.target.closest('#modelMenu') && 
 // ---------- Chat tarixi (localStorage) ----------
 let chats = JSON.parse(localStorage.getItem('myai-chats')||'[]');
 let currentId = null;
-function saveChats(){ localStorage.setItem('myai-chats', JSON.stringify(chats)); }
+let _syncTimer = null;
+function saveChats(){ localStorage.setItem('myai-chats', JSON.stringify(chats)); syncChatsToServer(); }
+function syncChatsToServer(){
+  const u = (typeof currentUser==='function') ? currentUser() : null;
+  if(!u || !u.token) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(()=>{
+    fetch('/api/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:u.token, chats})}).catch(()=>{});
+  }, 1500);
+}
+async function loadChatsFromServer(){
+  const u = (typeof currentUser==='function') ? currentUser() : null;
+  if(!u || !u.token) return;
+  try{
+    const r = await fetch('/api/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:u.token})});
+    const d = await r.json();
+    if(Array.isArray(d.chats) && d.chats.length){
+      chats = d.chats;
+      localStorage.setItem('myai-chats', JSON.stringify(chats));
+      currentId = chats.length ? chats[chats.length-1].id : null;
+      if(typeof renderHistory==='function') renderHistory();
+      if(typeof renderMessages==='function') renderMessages();
+    }
+  }catch(e){}
+}
 function currentChat(){ return chats.find(c=>c.id===currentId); }
 
 function renderHistory(){
@@ -1261,6 +1285,7 @@ document.getElementById('authSubmit').onclick = async ()=>{
     updateProfileUI();
     authModal.classList.remove('open');
     toast('Xush kelibsiz, '+d.name+'! 🎉');
+    if(typeof loadChatsFromServer==='function') loadChatsFromServer();
   }catch(e){ err.textContent="Server bilan aloqa yo'q"; }
 };
 // Enter bilan yuborish
@@ -1284,6 +1309,7 @@ async function onGoogle(resp){
     const d = await r.json();
     if(d.error){ if(err) err.textContent=d.error; return; }
     localStorage.setItem('myai-user', JSON.stringify({name:d.name,email:d.email,token:d.token,picture:d.picture||''}));
+    if(typeof loadChatsFromServer==='function') loadChatsFromServer();
     updateProfileUI();
     if(typeof authModal!=='undefined') authModal.classList.remove('open');
     toast('Xush kelibsiz, '+d.name+'! 🎉');
@@ -1313,6 +1339,8 @@ setMode('flash');
 if(chats.length){ currentId = chats[chats.length-1].id; } else { newChat(); }
 renderHistory(); renderMessages();
 setTimeout(moveGlow, 60);
+// Login bo'lgan bo'lsa server xotirasidan suhbatlarni yuklaymiz (qurilmalararo sinxron)
+if(typeof loadChatsFromServer==='function') loadChatsFromServer();
 </script>
 </body>
 </html>
