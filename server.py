@@ -838,6 +838,7 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(h, dict) and h.get("content"):
                 history.append({"role": h.get("role", "user"), "content": str(h["content"])[:2000]})
         image = data.get("image")
+        deep = bool(data.get("deep"))
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -886,77 +887,105 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-        # 2. Bir necha modeldan parallel javob (ishonchli bepul provayderlar)
-        tasks = []
-        if GEMINI_KEYS:
-            tasks.append(("gemini", GEMINI_KEYS))
-        if GROQ_KEY:
-            tasks.append(("groq", "llama-3.3-70b-versatile"))
-        if OPENROUTER_KEY:
-            tasks.append(("or", "openrouter/free"))
-        if HF_KEY:
-            tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
+        # 2. TEZ javob (standart): Groq'ni darhol oqim qilamiz (fallback Gemini -> OR)
+        if not deep:
+            sse_status("\U0001F4AC Javob yozilmoqda...")
+            streamed = False
+            if GROQ_KEY:
+                try:
+                    for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                             GROQ_KEY, "llama-3.3-70b-versatile", q, None, history):
+                        streamed = True; sse(chunk)
+                except Exception:
+                    streamed = False
+            if not streamed and GEMINI_KEYS:
+                try:
+                    for chunk in _gemini_gen(GEMINI_KEYS, q, history):
+                        streamed = True; sse(chunk)
+                except Exception:
+                    streamed = False
+            if not streamed and OPENROUTER_KEY:
+                try:
+                    for chunk in _openai_gen("https://openrouter.ai/api/v1/chat/completions",
+                                             OPENROUTER_KEY, "openrouter/free", q,
+                                             {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}, history):
+                        streamed = True; sse(chunk)
+                except Exception:
+                    streamed = False
+            if not streamed:
+                sse("Hozir modellar band. Bir ozdan keyin urining.")
+        else:
+            # 2. Bir necha modeldan parallel javob (ishonchli bepul provayderlar)
+            tasks = []
+            if GEMINI_KEYS:
+                tasks.append(("gemini", GEMINI_KEYS))
+            if GROQ_KEY:
+                tasks.append(("groq", "llama-3.3-70b-versatile"))
+            if OPENROUTER_KEY:
+                tasks.append(("or", "openrouter/free"))
+            if HF_KEY:
+                tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
 
-        sse_status("\U0001F91D Bir necha AI birga o'ylayapti...")
-        answers = []  # (kind, text) juftliklari
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-                futs = [(k, ex.submit(_collect, k, s, q, history)) for k, s in tasks]
-                for kind, f in futs:
-                    a = f.result()
-                    if a and a.strip():
-                        answers.append((kind, a.strip()))
-        except Exception as e:
-            import sys, traceback
-            print("[myai parallel xato]", e, file=sys.stderr); traceback.print_exc()
-        import sys as _s
-        print(f"[myai] {len(answers)} javob: {[k for k,_ in answers]}", file=_s.stderr)
-        # Gemini eng sifatli - fallback uchun ajratib olamiz
-        gem = next((t for k, t in answers if k == "gemini"), None)
-        grq = next((t for k, t in answers if k == "groq"), None)
-        best_raw = gem or grq or (max((t for _, t in answers), key=len) if answers else None)
+            sse_status("\U0001F91D Bir necha AI birga o'ylayapti...")
+            answers = []  # (kind, text) juftliklari
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = [(k, ex.submit(_collect, k, s, q, history)) for k, s in tasks]
+                    for kind, f in futs:
+                        a = f.result()
+                        if a and a.strip():
+                            answers.append((kind, a.strip()))
+            except Exception as e:
+                import sys, traceback
+                print("[myai parallel xato]", e, file=sys.stderr); traceback.print_exc()
+            import sys as _s
+            print(f"[myai] {len(answers)} javob: {[k for k,_ in answers]}", file=_s.stderr)
+            # Gemini eng sifatli - fallback uchun ajratib olamiz
+            gem = next((t for k, t in answers if k == "gemini"), None)
+            grq = next((t for k, t in answers if k == "groq"), None)
+            best_raw = gem or grq or (max((t for _, t in answers), key=len) if answers else None)
 
-        # 3. Sintez: javoblarni birlashtirib eng yaxshi yagona javob
-        try:
-            if not answers:
-                sse("Hozir barcha modellar band. Bir ozdan keyin urining.")
-            elif len(answers) == 1:
-                sse(answers[0][1])
-            else:
-                sse_status("\u2728 Eng yaxshi javob tayyorlanmoqda...")
-                texts = [t for _, t in answers]
-                blocks = "\n\n".join(f"=== Javob {i+1} ===\n{t[:2500]}" for i, t in enumerate(texts))
-                synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n{blocks}\n\n"
-                         "Shu javoblardagi eng to'g'ri va foydali fikrlarni birlashtirib, aniq, to'liq va "
-                         "ravon YAGONA javob yoz. Takrorlama, xato yoki tushunarsiz qismlarni tashla. "
-                         "Faqat ravon o'zbek tilida yoz.")
-                streamed = False
-                if GEMINI_KEYS:
-                    try:
-                        for chunk in _gemini_gen(GEMINI_KEYS, synth):
-                            streamed = True
-                            sse(chunk)
-                    except Exception:
-                        streamed = False
-                if not streamed and GROQ_KEY:
-                    # Gemini band bo'lsa - Groq bilan sintez (ishonchli)
-                    try:
-                        for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
-                                                 GROQ_KEY, "llama-3.3-70b-versatile", synth):
-                            streamed = True
-                            sse(chunk)
-                    except Exception:
-                        streamed = False
-                if not streamed:
-                    # Sintez bo'lmasa: Gemini javobini afzal ko'ramiz (eng sifatli)
-                    sse(best_raw or texts[0])
-        except Exception as e:
-            import sys, traceback
-            print("[myai sintez xato]", e, file=sys.stderr); traceback.print_exc()
-            if best_raw:
-                sse(best_raw)
-            else:
-                sse("Kechirasiz, hozir javob berolmadim. Qayta urining.")
+            # 3. Sintez: javoblarni birlashtirib eng yaxshi yagona javob
+            try:
+                if not answers:
+                    sse("Hozir barcha modellar band. Bir ozdan keyin urining.")
+                elif len(answers) == 1:
+                    sse(answers[0][1])
+                else:
+                    sse_status("\u2728 Eng yaxshi javob tayyorlanmoqda...")
+                    texts = [t for _, t in answers]
+                    blocks = "\n\n".join(f"=== Javob {i+1} ===\n{t[:2500]}" for i, t in enumerate(texts))
+                    synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n{blocks}\n\n"
+                             "Shu javoblardagi eng to'g'ri va foydali fikrlarni birlashtirib, aniq, to'liq va "
+                             "ravon YAGONA javob yoz. Takrorlama, xato yoki tushunarsiz qismlarni tashla. "
+                             "Faqat ravon o'zbek tilida yoz.")
+                    streamed = False
+                    if GEMINI_KEYS:
+                        try:
+                            for chunk in _gemini_gen(GEMINI_KEYS, synth):
+                                streamed = True
+                                sse(chunk)
+                        except Exception:
+                            streamed = False
+                    if not streamed and GROQ_KEY:
+                        # Gemini band bo'lsa - Groq bilan sintez (ishonchli)
+                        try:
+                            for chunk in _openai_gen("https://api.groq.com/openai/v1/chat/completions",
+                                                     GROQ_KEY, "llama-3.3-70b-versatile", synth):
+                                streamed = True
+                                sse(chunk)
+                        except Exception:
+                            streamed = False
+                    if not streamed:
+                        # Sintez bo'lmasa: Gemini javobini afzal ko'ramiz (eng sifatli)
+                        sse(best_raw or texts[0])
+            except Exception as e:
+                import sys, traceback
+                print("[myai sintez xato]", e, file=sys.stderr); traceback.print_exc()
+                if best_raw:
+                    sse(best_raw)
+                else:
+                    sse("Kechirasiz, hozir javob berolmadim. Qayta urining.")
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()

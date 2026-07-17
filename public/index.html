@@ -419,7 +419,7 @@ const MODES = [
   { key:'flash-lite', label:'Flash-Lite', short:'Lite',   icon:IC.bolt,   model:'gemini-flash-lite-latest' },
   { key:'flash',      label:'Flash',      short:'Flash',  icon:IC.spark,  model:'gemini-flash-latest' },
   { key:'pro',        label:'Pro',        short:'Pro',    icon:IC.code,   model:'gemini-flash-latest', pro:true },
-  { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'gemini-flash-latest', deep:true },
+  { key:'deep',       label:'Uzoqroq fikrlash', short:'Chuqur', icon:IC.search, model:'myai', provider:'myai', deep:true },
   { key:'llama',      label:'Llama 3.3', short:'Llama', icon:IC.spark, model:'meta-llama/Llama-3.3-70B-Instruct', provider:'hf' },
   { key:'deepseek',   label:'DeepSeek', short:'DeepSeek', icon:IC.code, model:'deepseek-ai/DeepSeek-V3', provider:'hf' },
   { key:'gpt4o',      label:'GPT-4o', short:'GPT-4o', icon:IC.spark, model:'openai/gpt-4o', provider:'openrouter' },
@@ -436,7 +436,7 @@ const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu 
 const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
-const MODEL_DESC = { 'myai':'Barcha AI birga fikrlaydi \u2014 eng yaxshi javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
+const MODEL_DESC = { 'myai':'Barcha AI birga fikrlaydi \u2014 eng yaxshi javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Barcha AI chuqur birga fikrlaydi (ansambl)', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
 MODES.forEach(m=>{
   const it = document.createElement('div');
   it.className = 'pop-item';
@@ -518,6 +518,30 @@ function cleanForSpeech(t){
     .replace(/\s{2,}/g,' ')
     .trim();
 }
+// Brauzer ovozi (o'zbek -> turk -> ozar -> qozoq -> rus), uzun matnni bo'laklab o'qiydi
+function pickBrowserVoice(){
+  const vs = speechSynthesis.getVoices();
+  for(const code of ['uz','tr','az','kk','ru']){ const v = vs.find(x=>(x.lang||'').toLowerCase().startsWith(code)); if(v) return v; }
+  return vs[0] || null;
+}
+function speakBrowser(text, onend){
+  const clean = cleanForSpeech(text);
+  if(!clean){ if(onend) onend(); return; }
+  speechSynthesis.cancel();
+  const v = pickBrowserVoice();
+  // gaplarga bo'lib navbat bilan o'qiymiz (uzun matn uzilmasligi uchun)
+  const chunks = clean.match(/[^.!?\n]+[.!?\n]*/g) || [clean];
+  let i = 0;
+  const next = () => {
+    if(i >= chunks.length){ if(onend) onend(); return; }
+    const u = new SpeechSynthesisUtterance(chunks[i++].trim());
+    if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'tr-TR'; }
+    u.rate = 0.95; u.pitch = 1.03;
+    u.onend = next; u.onerror = next;
+    speechSynthesis.speak(u);
+  };
+  next();
+}
 async function readAloud(text, btn){
   if(!text || !text.trim()){ toast("O'qishga matn yo'q"); return; }
   if(_readAudio){ try{_readAudio.pause();}catch(e){} _readAudio=null; }
@@ -525,9 +549,9 @@ async function readAloud(text, btn){
   try{
     const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cleanForSpeech(text).slice(0,900)})});
     const d = await r.json();
-    if(d.audio){ const a=new Audio(d.audio); _readAudio=a; a.onended=()=>{ if(btn) btn.classList.remove('text-indigo-400'); _readAudio=null; }; a.onerror=()=>{ if(btn) btn.classList.remove('text-indigo-400'); }; a.play(); }
-    else { toast('Ovoz xatosi'); if(btn) btn.classList.remove('text-indigo-400'); }
-  }catch(e){ toast('Aloqa xatosi'); if(btn) btn.classList.remove('text-indigo-400'); }
+    if(d.audio){ const a=new Audio(d.audio); _readAudio=a; a.onended=()=>{ if(btn) btn.classList.remove('text-indigo-400'); _readAudio=null; }; a.onerror=()=>{ if(btn) btn.classList.remove('text-indigo-400'); speakBrowser(text, ()=>{if(btn) btn.classList.remove('text-indigo-400');}); }; a.play(); }
+    else { speakBrowser(text, ()=>{ if(btn) btn.classList.remove('text-indigo-400'); }); }
+  }catch(e){ speakBrowser(text, ()=>{ if(btn) btn.classList.remove('text-indigo-400'); }); }
 }
 function aiRow(modeLabel){
   const w = document.createElement('div');
@@ -595,7 +619,7 @@ async function ask(){
   try {
     const _url = useResearch ? '/api/research' : (m.provider==='myai' ? '/api/myai' : m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
     const _hist = (c.messages||[]).slice(0,-1).slice(-6).map(x=>({role:x.role, content:x.content}));
-    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist };
+    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist, deep: !!m.deep };
     if(!useResearch && (m.provider==='myai' || !m.provider) && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -976,14 +1000,8 @@ const VM = {
         return;
       }
     }catch(e){}
-    // Zaxira: brauzer ovozi (turk fonetikasi)
-    const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
-    const v = this.pickVoice();
-    if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'tr-TR'; }
-    u.rate = 0.97; u.pitch = 1.02;
-    u.onend = () => { if(this.active){ vTranscript.textContent=''; this.listen(); } };
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
+    // Zaxira: brauzer ovozi (bo'laklab, o'zbek->turk)
+    speakBrowser(text, () => { if(this.active){ vTranscript.textContent=''; this.listen(); } });
   },
 
   loop(){
