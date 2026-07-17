@@ -19,7 +19,7 @@ def load_env():
     return env
 ENV = load_env()
 OR_KEY = os.environ.get("OPENROUTER_KEY") or ENV.get("OPENROUTER_KEY", "")
-MODEL = os.environ.get("MYAI_CLI_MODEL", "openai/gpt-4o")
+MODEL = os.environ.get("MYAI_CLI_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 class C:
     R="\033[0m"; B="\033[1m"; DIM="\033[2m"; GRN="\033[32m"; YEL="\033[33m"
@@ -63,7 +63,7 @@ def exec_tool(name, args):
     return "Noma'lum vosita"
 
 def call(messages):
-    body = {"model": MODEL, "messages": messages, "tools": TOOLS, "tool_choice": "auto", "max_tokens": 1200}
+    body = {"model": MODEL, "messages": messages, "tools": TOOLS, "tool_choice": "auto", "max_tokens": 2048}
     req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers={"Authorization": f"Bearer {OR_KEY}", "Content-Type": "application/json",

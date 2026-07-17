@@ -7,6 +7,7 @@ import re
 import os
 import time
 import datetime
+import concurrent.futures
 import hashlib
 import secrets
 import base64
@@ -372,6 +373,100 @@ def decode_jwt(token):
         return None
 
 
+def _gemini_gen(keys, prompt):
+    """Barcha Gemini kalitlarni sinaydi (429/kvota -> keyingi kalit)."""
+    if isinstance(keys, str):
+        keys = [keys]
+    url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+           "gemini-flash-latest:streamGenerateContent?alt=sse")
+    body = {"systemInstruction": {"parts": [{"text": load_system_prompt()}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    last_err = None
+    for key in keys:
+        try:
+            req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json", "x-goog-api-key": key})
+            got = False
+            with urllib.request.urlopen(req, timeout=70) as resp:
+                for raw in resp:
+                    raw = raw.strip()
+                    if not raw or not raw.startswith(b"data:"):
+                        continue
+                    try:
+                        obj = json.loads(raw[5:].strip())
+                        for p in obj["candidates"][0]["content"]["parts"]:
+                            if p.get("text"):
+                                got = True
+                                yield p["text"]
+                    except Exception:
+                        continue
+            if got:
+                return
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+
+
+def _openai_gen(url, key, model, prompt, extra=None):
+    body = {"model": model, "stream": True, "max_tokens": 1024,
+            "messages": [{"role": "system", "content": load_system_prompt()},
+                         {"role": "user", "content": prompt}]}
+    headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json",
+               "User-Agent": "Mozilla/5.0 MyAI/1.0"}
+    if extra:
+        headers.update(extra)
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers)
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        for raw in resp:
+            raw = raw.strip()
+            if not raw or not raw.startswith(b"data:"):
+                continue
+            chunk = raw[5:].strip()
+            if chunk == b"[DONE]":
+                break
+            try:
+                delta = json.loads(chunk)["choices"][0].get("delta", {})
+                if delta.get("content"):
+                    yield delta["content"]
+            except Exception:
+                continue
+
+
+def _is_junk(text):
+    """Axlat/rad javoblarni aniqlaydi (juda qisqa yoki xizmat matni)."""
+    t = (text or "").strip()
+    if len(t) < 12:
+        return True
+    low = t.lower()
+    for bad in ("user safety", "i cannot assist", "as an ai language model",
+                "safety:", "content policy"):
+        if low.startswith(bad) or low == bad:
+            return True
+    return False
+
+
+def _collect(kind, spec, prompt):
+    """Bitta modeldan to'liq javob yig'adi (parallel uchun). Axlat bo'lsa '' qaytaradi."""
+    try:
+        if kind == "gemini":
+            out = "".join(_gemini_gen(spec, prompt))
+            return "" if _is_junk(out) else out
+        if kind == "hf":
+            out = "".join(_openai_gen("https://router.huggingface.co/v1/chat/completions",
+                                      HF_KEY, spec, prompt))
+            return "" if _is_junk(out) else out
+        if kind == "or":
+            out = "".join(_openai_gen("https://openrouter.ai/api/v1/chat/completions",
+                                      OPENROUTER_KEY, spec, prompt,
+                                      {"HTTP-Referer": "https://myai.app", "X-Title": "MyAI"}))
+            return "" if _is_junk(out) else out
+    except Exception:
+        return ""
+    return ""
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         self.send_response(code)
@@ -484,6 +579,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = web_search(query)
             self._send(200, json.dumps(result, ensure_ascii=False))
+        elif self.path == "/api/myai":
+            self.stream_myai()
         elif self.path == "/api/gemini":
             self.stream_gemini()
         elif self.path == "/api/hf":
@@ -711,6 +808,88 @@ class Handler(BaseHTTPRequestHandler):
                     sse(f"[{i+1}] {c['link']}\n")
         try:
             self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def stream_myai(self):
+        """Birlashtirilgan MyAI: bir necha AI birga fikrlab, eng yaxshi yagona javob."""
+        data = self._read_body()
+        prompt = (data.get("prompt") or "").strip()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def sse(txt):
+            self.wfile.write(f"data: {json.dumps({'c': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        # 1. Kerak bo'lsa internet ma'lumoti
+        q = prompt
+        if SERPAPI_KEY and is_factual(prompt):
+            try:
+                ctx = research_context(prompt)
+                if ctx:
+                    src_txt = "\n".join(f"- {r['snippet']}" for r in ctx[:4] if r.get('snippet'))
+                    q = prompt + "\n\n[Internetdan topilgan ma'lumotlar:\n" + src_txt + "]"
+            except Exception:
+                pass
+
+        # 2. Bir necha modeldan parallel javob (ishonchli bepul provayderlar)
+        tasks = []
+        if GEMINI_KEYS:
+            tasks.append(("gemini", GEMINI_KEYS))
+        if OPENROUTER_KEY:
+            tasks.append(("or", "openrouter/free"))
+        if HF_KEY and len(tasks) < 2:
+            tasks.append(("hf", "meta-llama/Llama-3.3-70B-Instruct"))
+
+        answers = []
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+                futs = [ex.submit(_collect, k, s, q) for k, s in tasks]
+                for f in futs:
+                    a = f.result()
+                    if a and a.strip():
+                        answers.append(a.strip())
+        except Exception as e:
+            import sys, traceback
+            print("[myai parallel xato]", e, file=sys.stderr); traceback.print_exc()
+        import sys as _s
+        print(f"[myai] {len(answers)} ta javob keldi (tasks={[t[0] for t in tasks]})", file=_s.stderr)
+
+        # 3. Sintez: javoblarni birlashtirib eng yaxshi yagona javob
+        try:
+            if not answers:
+                sse("Hozir barcha modellar band. Bir ozdan keyin urining.")
+            elif len(answers) == 1:
+                sse(answers[0])
+            else:
+                synth = (f"Savol: {prompt}\n\nQuyida turli AI modellar javob berdi:\n\n"
+                         f"=== Javob 1 ===\n{answers[0][:2500]}\n\n=== Javob 2 ===\n{answers[1][:2500]}\n\n"
+                         "Shu javoblardagi eng yaxshi fikrlarni birlashtirib, aniq, to'liq va foydali "
+                         "YAGONA javob yoz. Takrorlama, eng muhimini qoldir. O'zbek tilida.")
+                streamed = False
+                if GEMINI_KEYS:
+                    try:
+                        for chunk in _gemini_gen(GEMINI_KEYS, synth):
+                            streamed = True
+                            sse(chunk)
+                    except Exception:
+                        streamed = False
+                if not streamed:
+                    sse(max(answers, key=len))  # sintez bo'lmasa - eng uzun javob
+        except Exception as e:
+            import sys, traceback
+            print("[myai sintez xato]", e, file=sys.stderr); traceback.print_exc()
+            if answers:
+                sse(max(answers, key=len))
+            else:
+                sse("Kechirasiz, hozir javob berolmadim. Qayta urining.")
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 

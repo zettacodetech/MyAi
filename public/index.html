@@ -414,6 +414,7 @@ const IC = {
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
 };
 const MODES = [
+  { key:'myai',       label:'MyAI \u2726',  short:'MyAI',   icon:IC.spark,  model:'myai', provider:'myai' },
   { key:'flash-lite', label:'Flash-Lite', short:'Lite',   icon:IC.bolt,   model:'gemini-flash-lite-latest' },
   { key:'flash',      label:'Flash',      short:'Flash',  icon:IC.spark,  model:'gemini-flash-latest' },
   { key:'pro',        label:'Pro',        short:'Pro',    icon:IC.code,   model:'gemini-flash-latest', pro:true },
@@ -423,7 +424,7 @@ const MODES = [
   { key:'gpt4o',      label:'GPT-4o', short:'GPT-4o', icon:IC.spark, model:'openai/gpt-4o', provider:'openrouter' },
   { key:'orfree',     label:'Bepul AI', short:'Bepul', icon:IC.bolt, model:'openrouter/free', provider:'openrouter' },
 ];
-let MODE = 'flash';
+let MODE = 'myai';
 let RESEARCH = false;
 let attachedImage = null;
 
@@ -433,7 +434,7 @@ const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu 
 const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
-const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
+const MODEL_DESC = { 'myai':'Barcha AI birga fikrlaydi \u2014 eng yaxshi javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
 MODES.forEach(m=>{
   const it = document.createElement('div');
   it.className = 'pop-item';
@@ -578,7 +579,7 @@ async function ask(){
   if(m.deep) promptText = piNote + 'Quyidagi savolni chuqur, bosqichma-bosqich tahlil qilib, mantiqiy izohlar bilan javob ber:\n\n' + text;
   else if(m.pro) promptText = piNote + 'Ekspert darajasida, batafsil va aniq javob ber. Kod yoki matematika bo\'lsa, to\'liq ishlaydigan yechim va tushuntirish ber:\n\n' + text;
   try {
-    const _url = useResearch ? '/api/research' : (m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
+    const _url = useResearch ? '/api/research' : (m.provider==='myai' ? '/api/myai' : m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
     const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model };
     if(!useResearch && !m.provider && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
