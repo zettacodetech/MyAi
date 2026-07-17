@@ -9,6 +9,7 @@ import time
 import datetime
 import hashlib
 import secrets
+import base64
 import urllib.request
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -61,6 +62,7 @@ def load_system_prompt():
 ENV = load_env()
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY") or ENV.get("SERPAPI_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or ENV.get("ANTHROPIC_API_KEY", "")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or ENV.get("GOOGLE_CLIENT_ID", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-flash-latest"
 if GEMINI_KEY:
@@ -271,6 +273,16 @@ def hash_pw(pw, salt):
     return hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), 100000).hex()
 
 
+def decode_jwt(token):
+    """Google ID token (JWT) payloadini ochadi (imzo tekshirilmaydi, demo uchun)."""
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         self.send_response(code)
@@ -285,6 +297,9 @@ class Handler(BaseHTTPRequestHandler):
         pass  # jim
 
     def do_GET(self):
+        if self.path.split("?")[0] == "/api/config":
+            self._send(200, json.dumps({"googleClientId": GOOGLE_CLIENT_ID}))
+            return
         path = self.path.split("?")[0]
         if path == "/":
             path = "/index.html"
@@ -330,6 +345,22 @@ class Handler(BaseHTTPRequestHandler):
             if not u or u["hash"] != hash_pw(pw, u["salt"]):
                 self._send(401, json.dumps({"error": "Email yoki parol xato"}, ensure_ascii=False)); return
             self._send(200, json.dumps({"ok": True, "name": u["name"], "email": email, "token": u["token"]}, ensure_ascii=False)); return
+        if self.path == "/api/google":
+            d = self._read_body()
+            info = decode_jwt(d.get("credential") or "")
+            if not info or not info.get("email"):
+                self._send(400, json.dumps({"error": "Google token yaroqsiz"}, ensure_ascii=False)); return
+            email = info["email"].lower()
+            name = info.get("name") or email.split("@")[0]
+            users = load_users()
+            if email in users:
+                token = users[email].get("token") or secrets.token_hex(24)
+                users[email]["token"] = token; users[email]["name"] = name
+            else:
+                token = secrets.token_hex(24)
+                users[email] = {"name": name, "google": True, "token": token, "picture": info.get("picture", "")}
+            save_users(users)
+            self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token, "picture": info.get("picture", "")}, ensure_ascii=False)); return
         if self.path == "/api/generate":
             data = self._read_body()
             prompt = (data.get("prompt") or "").strip().lower()

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -379,6 +380,9 @@ tailwind.config = {
       <input id="authPass" type="password" placeholder="Parol" class="auth-inp">
       <div id="authErr" class="text-rose-400 text-[12.5px] min-h-[16px]"></div>
       <button id="authSubmit" class="grad-btn text-white font-semibold py-2.5 rounded-xl active:scale-95 hover:brightness-110 transition">Kirish</button>
+      <div class="flex items-center gap-3 my-1"><div class="flex-1 h-px bg-white/10"></div><span class="text-[11px] text-muted">yoki</span><div class="flex-1 h-px bg-white/10"></div></div>
+      <div id="googleBtn" class="flex justify-center min-h-[40px]"></div>
+      <div id="googleNote" class="text-center text-[11.5px] text-muted" style="display:none">Google kirish hali sozlanmagan</div>
       <div class="text-center text-[13px] text-muted mt-1">
         <span id="authSwitchTxt">Hisobingiz yo'qmi?</span> <span id="authSwitch" class="text-indigo-300 cursor-pointer font-semibold">Ro'yxatdan o'ting</span>
       </div>
@@ -1082,6 +1086,38 @@ const _pmAdd = document.getElementById('pmAddAcc');
 if(_pmAdd) _pmAdd.onclick = ()=> openAuth('register');
 
 updateProfileUI();
+
+// ========== GOOGLE ORQALI KIRISH ==========
+async function onGoogle(resp){
+  const err = document.getElementById('authErr');
+  try{
+    const r = await fetch('/api/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
+    const d = await r.json();
+    if(d.error){ if(err) err.textContent=d.error; return; }
+    localStorage.setItem('myai-user', JSON.stringify({name:d.name,email:d.email,token:d.token,picture:d.picture||''}));
+    updateProfileUI();
+    if(typeof authModal!=='undefined') authModal.classList.remove('open');
+    toast('Xush kelibsiz, '+d.name+'! 🎉');
+  }catch(e){ if(err) err.textContent="Server bilan aloqa yo'q"; }
+}
+async function initGoogle(){
+  let cid = '';
+  try{ cid = (await (await fetch('/api/config')).json()).googleClientId || ''; }catch(e){}
+  const note = document.getElementById('googleNote');
+  if(!cid){ if(note) note.style.display=''; return; }
+  if(note) note.style.display='none';
+  let tries = 0;
+  const iv = setInterval(()=>{
+    if(window.google && google.accounts && google.accounts.id){
+      clearInterval(iv);
+      try{
+        google.accounts.id.initialize({ client_id: cid, callback: onGoogle });
+        google.accounts.id.renderButton(document.getElementById('googleBtn'), { theme:'filled_black', size:'large', width:300, text:'signin_with', shape:'pill', logo_alignment:'left' });
+      }catch(e){ if(note){ note.style.display=''; note.textContent='Google kirish xatosi (origin ro\'yxatdan o\'tmagan)'; } }
+    } else if(++tries > 50){ clearInterval(iv); if(note){ note.style.display=''; note.textContent='Google skripti yuklanmadi'; } }
+  }, 150);
+}
+initGoogle();
 
 // ---------- Start ----------
 setMode('flash');
