@@ -66,6 +66,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or ENV.get("GOOGLE_CLIENT_
 OCOYA_KEY = os.environ.get("OCOYA_API_KEY") or ENV.get("OCOYA_API_KEY", "")
 OCOYA_BASE = "https://www.app.ocoya.com/api/_public/v1"
 FIREFLIES_KEY = os.environ.get("FIREFLIES_API_KEY") or ENV.get("FIREFLIES_API_KEY", "")
+MEDIASTACK_KEY = os.environ.get("MEDIASTACK_API_KEY") or ENV.get("MEDIASTACK_API_KEY", "")
 _gem_raw = os.environ.get("GEMINI_API_KEY") or ENV.get("GEMINI_API_KEY", "")
 GEMINI_KEYS = [k.strip() for k in _gem_raw.split(",") if k.strip()]
 GEMINI_KEY = GEMINI_KEYS[0] if GEMINI_KEYS else ""
@@ -306,6 +307,22 @@ def ocoya_post(caption, scheduled_at=None):
         return {"error": str(e)}
 
 
+def mediastack_news(limit=8):
+    if not MEDIASTACK_KEY:
+        return {"error": "Mediastack kaliti yo'q"}
+    try:
+        url = "http://api.mediastack.com/v1/news?" + urllib.parse.urlencode({
+            "access_key": MEDIASTACK_KEY, "limit": limit, "languages": "en,ru", "sort": "published_desc"})
+        with urllib.request.urlopen(url, timeout=20) as r:
+            d = json.loads(r.read())
+        items = [{"title": a.get("title"), "source": a.get("source"),
+                  "url": a.get("url"), "date": (a.get("published_at") or "")[:10]}
+                 for a in (d.get("data") or []) if a.get("title")]
+        return {"items": items}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def fireflies_meetings(limit=10):
     if not FIREFLIES_KEY:
         return {"error": "Fireflies kaliti yo'q"}
@@ -414,6 +431,8 @@ class Handler(BaseHTTPRequestHandler):
                 users[email] = {"name": name, "google": True, "token": token, "picture": info.get("picture", "")}
             save_users(users)
             self._send(200, json.dumps({"ok": True, "name": name, "email": email, "token": token, "picture": info.get("picture", "")}, ensure_ascii=False)); return
+        if self.path == "/api/worldnews":
+            self._send(200, json.dumps(mediastack_news(8), ensure_ascii=False)); return
         if self.path == "/api/fireflies":
             self._send(200, json.dumps(fireflies_meetings(10), ensure_ascii=False)); return
         if self.path == "/api/ocoya":

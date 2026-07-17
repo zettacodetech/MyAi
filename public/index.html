@@ -264,6 +264,7 @@ tailwind.config = {
               <div class="pop-item" data-act="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Musiqa yaratish</div>
               <div class="pop-item" data-act="ocoya"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Ijtimoiy tarmoqqa post</div>
               <div class="pop-item" data-act="fireflies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Yig'ilishlarim (Fireflies)</div>
+              <div class="pop-item" data-act="worldnews"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>Dunyo yangiliklari</div>
               <div class="pop-sep"></div>
               <div class="pop-item" id="moreBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Boshqa vositalar<svg class="ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M9 18l6-6-6-6"/></svg>
                 <div id="subMenu" class="pop sub glass-strong">
@@ -704,6 +705,22 @@ function handleAct(a){
         ms.forEach((m,i)=>{ txt += (i+1)+'. '+m.title+'\n'+(m.overview?('   '+m.overview.slice(0,220)+'\n'):'')+'\n'; });
         row.body.textContent = txt;
         currentChat().messages.push({role:'assistant', content:txt, mode:'flash'}); saveChats(); scrollDown();
+      }).catch(()=>toast('Aloqa xatosi'));
+    return;
+  }
+  if(a === 'worldnews'){
+    toast("Yangiliklar yuklanmoqda...");
+    fetch('/api/worldnews',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(r=>r.json()).then(d=>{
+        if(d.error){ toast('Xato: '+d.error); return; }
+        const items = d.items||[];
+        if(!items.length){ toast("Yangilik topilmadi"); return; }
+        const empt = document.getElementById('empty'); if(empt) empt.remove();
+        if(!currentChat()) newChat();
+        const row = aiRow('🌍 Dunyo yangiliklari');
+        row.body.textContent = '';
+        items.forEach(n=>{ const it=document.createElement('div'); it.className='news-item'; it.innerHTML='<a href="'+n.url+'" target="_blank">'+n.title+'</a><div class="text-[11.5px] text-muted mt-0.5">'+(n.source||'')+(n.date?(' \u00b7 '+n.date):'')+'</div>'; row.extra.appendChild(it); });
+        currentChat().messages.push({role:'assistant', content:'🌍 Dunyo yangiliklari', mode:'flash'}); saveChats(); scrollDown();
       }).catch(()=>toast('Aloqa xatosi'));
     return;
   }
