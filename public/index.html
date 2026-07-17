@@ -421,6 +421,7 @@ const MODES = [
   { key:'llama',      label:'Llama 3.3', short:'Llama', icon:IC.spark, model:'meta-llama/Llama-3.3-70B-Instruct', provider:'hf' },
   { key:'deepseek',   label:'DeepSeek', short:'DeepSeek', icon:IC.code, model:'deepseek-ai/DeepSeek-V3', provider:'hf' },
   { key:'gpt4o',      label:'GPT-4o', short:'GPT-4o', icon:IC.spark, model:'openai/gpt-4o', provider:'openrouter' },
+  { key:'orfree',     label:'Bepul AI', short:'Bepul', icon:IC.bolt, model:'openrouter/free', provider:'openrouter' },
 ];
 let MODE = 'flash';
 let RESEARCH = false;
@@ -432,7 +433,7 @@ const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu 
 const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
-const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)' };
+const MODEL_DESC = { 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Murakkab muammolarni hal qilish', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
 MODES.forEach(m=>{
   const it = document.createElement('div');
   it.className = 'pop-item';
