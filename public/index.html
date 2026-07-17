@@ -416,6 +416,7 @@ const IC = {
 };
 const MODES = [
   { key:'myai',       label:'MyAI \u2726',  short:'MyAI',   icon:IC.spark,  model:'myai', provider:'myai' },
+  { key:'fast',       label:'Tez javob \u26a1', short:'Tez',   icon:IC.bolt,   model:'myai', provider:'myai', fast:true },
   { key:'flash-lite', label:'Flash-Lite', short:'Lite',   icon:IC.bolt,   model:'gemini-flash-lite-latest' },
   { key:'flash',      label:'Flash',      short:'Flash',  icon:IC.spark,  model:'gemini-flash-latest' },
   { key:'pro',        label:'Pro',        short:'Pro',    icon:IC.code,   model:'gemini-flash-latest', pro:true },
@@ -436,7 +437,7 @@ const modelBtn = $('#modelBtn'), modelBtnLabel = $('#modelBtnLabel'), modelMenu 
 const historyEl = $('#history');
 
 // ---------- Model selektori (input ichida) ----------
-const MODEL_DESC = { 'myai':'Barcha AI birga fikrlaydi \u2014 eng yaxshi javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Barcha AI chuqur birga fikrlaydi (ansambl)', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
+const MODEL_DESC = { 'myai':'Barcha modellar birga: Gemini+Groq+Llama+Bepul AI \u2014 eng yaxshi javob', 'fast':'Bitta tez model (Groq) \u2014 darhol javob', 'flash-lite':'Eng tezkor javoblar', 'flash':'Barcha sohalarda yordam', 'pro':'Oliy matematika va dasturlash', 'deep':'Barcha AI chuqur birga fikrlaydi (ansambl)', 'llama':'Meta Llama 3.3 (70B, bepul)', 'deepseek':'DeepSeek V3 (kuchli, bepul)', 'gpt4o':'OpenAI GPT-4o (OpenRouter)', 'orfree':'Bepul universal AI (OpenRouter)' };
 MODES.forEach(m=>{
   const it = document.createElement('div');
   it.className = 'pop-item';
@@ -619,7 +620,7 @@ async function ask(){
   try {
     const _url = useResearch ? '/api/research' : (m.provider==='myai' ? '/api/myai' : m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
     const _hist = (c.messages||[]).slice(0,-1).slice(-6).map(x=>({role:x.role, content:x.content}));
-    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist, deep: !!m.deep };
+    const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist, deep: !!m.deep, fast: !!m.fast };
     if(!useResearch && (m.provider==='myai' || !m.provider) && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},

@@ -839,6 +839,7 @@ class Handler(BaseHTTPRequestHandler):
                 history.append({"role": h.get("role", "user"), "content": str(h["content"])[:2000]})
         image = data.get("image")
         deep = bool(data.get("deep"))
+        fast = bool(data.get("fast"))
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -887,8 +888,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-        # 2. TEZ javob (standart): Groq'ni darhol oqim qilamiz (fallback Gemini -> OR)
-        if not deep:
+        # 2. Standart ✦ MyAI = BARCHA modellar ansambli (pastda).
+        #    Faqat fast=true bo'lsa Groq'ni darhol oqim qilamiz (tez rejim).
+        if fast:
             sse_status("\U0001F4AC Javob yozilmoqda...")
             streamed = False
             if GROQ_KEY:
