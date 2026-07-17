@@ -582,7 +582,7 @@ async function ask(){
     const _url = useResearch ? '/api/research' : (m.provider==='myai' ? '/api/myai' : m.provider==='hf' ? '/api/hf' : m.provider==='openrouter' ? '/api/openrouter' : '/api/gemini');
     const _hist = (c.messages||[]).slice(0,-1).slice(-6).map(x=>({role:x.role, content:x.content}));
     const _payload = useResearch ? { prompt: text } : { prompt: promptText, model: m.model, history: _hist };
-    if(!useResearch && !m.provider && attachedImage){ _payload.image = attachedImage; }
+    if(!useResearch && (m.provider==='myai' || !m.provider) && attachedImage){ _payload.image = attachedImage; }
     const r = await fetch(_url, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(_payload)

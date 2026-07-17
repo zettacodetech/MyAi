@@ -373,8 +373,8 @@ def decode_jwt(token):
         return None
 
 
-def _gemini_gen(keys, prompt, history=None):
-    """Barcha Gemini kalitlarni sinaydi (429/kvota -> keyingi kalit)."""
+def _gemini_gen(keys, prompt, history=None, img=None):
+    """Barcha Gemini kalitlarni sinaydi (429/kvota -> keyingi kalit). img bo'lsa vision."""
     if isinstance(keys, str):
         keys = [keys]
     url = ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -383,7 +383,10 @@ def _gemini_gen(keys, prompt, history=None):
     for h in (history or []):
         role = "model" if h.get("role") == "assistant" else "user"
         contents.append({"role": role, "parts": [{"text": h.get("content", "")}]})
-    contents.append({"role": "user", "parts": [{"text": prompt}]})
+    _parts = [{"text": prompt}]
+    if img and img.get("data"):
+        _parts.append({"inlineData": {"mimeType": img.get("mime", "image/png"), "data": img["data"]}})
+    contents.append({"role": "user", "parts": _parts})
     body = {"systemInstruction": {"parts": [{"text": load_system_prompt()}]},
             "contents": contents}
     last_err = None
@@ -835,6 +838,7 @@ class Handler(BaseHTTPRequestHandler):
         for h in _raw_hist[-6:]:
             if isinstance(h, dict) and h.get("content"):
                 history.append({"role": h.get("role", "user"), "content": str(h["content"])[:2000]})
+        image = data.get("image")
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -844,6 +848,24 @@ class Handler(BaseHTTPRequestHandler):
         def sse(txt):
             self.wfile.write(f"data: {json.dumps({'c': txt}, ensure_ascii=False)}\n\n".encode("utf-8"))
             self.wfile.flush()
+
+        # 0. Rasm bo'lsa: faqat Gemini "ko'radi" - vision'ga yo'naltiramiz
+        if image and image.get("data"):
+            vprompt = prompt or "Bu rasmda nima bor? Batafsil tushuntir."
+            try:
+                got = False
+                for chunk in _gemini_gen(GEMINI_KEYS, vprompt, history, image):
+                    got = True
+                    sse(chunk)
+                if not got:
+                    sse("Rasmni tahlil qila olmadim, boshqa rasm bilan urinib ko'ring.")
+            except Exception as e:
+                sse(f"Rasmni tahlil qilishda xatolik: hozir band, keyinroq urining.")
+            try:
+                self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
 
         # 1. Kerak bo'lsa internet ma'lumoti
         q = prompt
