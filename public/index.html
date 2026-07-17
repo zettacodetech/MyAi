@@ -498,6 +498,18 @@ function userRow(text){
   w.innerHTML = `<div class="user-bubble px-4 py-3 max-w-[80%] text-[15px] text-ink leading-relaxed">${escapeHtml(text)}</div>`;
   chat.appendChild(w);
 }
+let _readAudio = null;
+async function readAloud(text, btn){
+  if(!text || !text.trim()){ toast("O'qishga matn yo'q"); return; }
+  if(_readAudio){ try{_readAudio.pause();}catch(e){} _readAudio=null; }
+  if(btn) btn.classList.add('text-indigo-400');
+  try{
+    const r = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,900)})});
+    const d = await r.json();
+    if(d.audio){ const a=new Audio(d.audio); _readAudio=a; a.onended=()=>{ if(btn) btn.classList.remove('text-indigo-400'); _readAudio=null; }; a.onerror=()=>{ if(btn) btn.classList.remove('text-indigo-400'); }; a.play(); }
+    else { toast('Ovoz xatosi'); if(btn) btn.classList.remove('text-indigo-400'); }
+  }catch(e){ toast('Aloqa xatosi'); if(btn) btn.classList.remove('text-indigo-400'); }
+}
 function aiRow(modeLabel){
   const w = document.createElement('div');
   w.className = 'mb-8 fu';
@@ -506,11 +518,16 @@ function aiRow(modeLabel){
       <div class="w-6 h-6 rounded-lg grad-btn flex items-center justify-center text-[11px] font-bold text-white">M</div>
       <span class="text-[13px] font-bold">MyAI <span class="grad-text">✨</span></span>
       <span class="text-[11px] text-muted px-2 py-0.5 rounded-full glass">${modeLabel||''}</span>
+      <button class="readAloud ml-auto text-muted hover:text-ink transition p-1 rounded-md hover:bg-white/5" title="Ovozda o'qish (o'zbekcha)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>
+      </button>
     </div>
     <div class="ai-body pl-8"></div>
     <div class="pl-8 extra"></div>`;
   chat.appendChild(w);
-  return { body: w.querySelector('.ai-body'), extra: w.querySelector('.extra') };
+  const body = w.querySelector('.ai-body');
+  w.querySelector('.readAloud').onclick = () => readAloud(body.textContent, w.querySelector('.readAloud'));
+  return { body, extra: w.querySelector('.extra') };
 }
 function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function scrollDown(){ scroll.scrollTop = scroll.scrollHeight; }
